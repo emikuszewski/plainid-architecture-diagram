@@ -1,5 +1,5 @@
 import React from 'react';
-import ArchitectureDiagram from './components/ArchitectureDiagram';
+import ArchitectureDiagram from './components/ArchitectureDiagram.js'; // Explicitly add the .js extension
 
 function App() {
   return (
