@@ -1,0 +1,5 @@
+Note: You'll need to add a favicon.ico file to your repository. This is a small icon that appears in browser tabs.
+
+You can create a simple favicon using any design tool or favicon generator website, or use a generic React or authorization-themed icon.
+
+This file should be placed in the "public" folder of your project.
