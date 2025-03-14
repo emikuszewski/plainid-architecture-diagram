@@ -1,0 +1,5 @@
+Note: For the app icons (logo192.png and logo512.png), you'll need to add them to your repository.
+
+You can create simple placeholder icons with these dimensions (192x192 and 512x512 pixels) using any design tool, or you can use generic React or authorization-themed icons.
+
+These files should be placed in the "public" folder of your project.
