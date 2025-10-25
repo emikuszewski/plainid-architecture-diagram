@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Server, Database, Cloud, Shield, ArrowDown, Users, Lock, Zap, Layers, Box, GitBranch, Info, Menu, X, ExternalLink, Home, Settings, HelpCircle } from 'lucide-react';
 
 const ArchitectureDiagram = () => {
@@ -7,6 +7,20 @@ const ArchitectureDiagram = () => {
   const [tooltipContent, setTooltipContent] = useState({ title: '', description: '' });
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+
+  // Create refs for each component
+  const lbRef = useRef(null);
+  const oauthRef = useRef(null);
+  const papRef = useRef(null);
+  const cloudPdpRef = useRef(null);
+  const agentRef = useRef(null);
+  const pipRef = useRef(null);
+  const pdpRef = useRef(null);
+  const authorizersRef = useRef(null);
+  const postgresRef = useRef(null);
+  const saasRedisRef = useRef(null);
+  const customerRedisRef = useRef(null);
+  const idpRef = useRef(null);
 
   const handleComponentClick = (component, position) => {
     setActiveComponent(component === activeComponent ? null : component);
@@ -84,6 +98,15 @@ const ArchitectureDiagram = () => {
     }
   };
 
+  const handleSidebarClick = (component, ref) => {
+    setActiveComponent(component);
+    setShowTooltip(false);
+    
+    if (ref && ref.current) {
+      ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header - simplified with no navigation elements */}
@@ -117,28 +140,98 @@ const ArchitectureDiagram = () => {
                 <div className="border-l-4 border-blue-500 pl-3 py-1">
                   <h4 className="font-medium text-blue-800">PlainID SaaS Platform</h4>
                   <ul className="mt-2 space-y-2 text-sm">
-                    <li><a href="#" className="text-gray-600 hover:text-blue-600 flex items-center"><Lock size={14} className="mr-1" /> OAuth</a></li>
-                    <li><a href="#" className="text-gray-600 hover:text-blue-600 flex items-center"><GitBranch size={14} className="mr-1" /> Load Balancer</a></li>
-                    <li><a href="#" className="text-blue-600 font-medium flex items-center"><Server size={14} className="mr-1" /> PAP Services</a></li>
-                    <li><a href="#" className="text-gray-600 hover:text-blue-600 flex items-center"><Cloud size={14} className="mr-1" /> Cloud PDP</a></li>
+                    <li>
+                      <button 
+                        onClick={() => handleSidebarClick('oauth', oauthRef)}
+                        className="text-gray-600 hover:text-blue-600 flex items-center w-full text-left"
+                      >
+                        <Lock size={14} className="mr-1" /> OAuth
+                      </button>
+                    </li>
+                    <li>
+                      <button 
+                        onClick={() => handleSidebarClick('lb', lbRef)}
+                        className="text-gray-600 hover:text-blue-600 flex items-center w-full text-left"
+                      >
+                        <GitBranch size={14} className="mr-1" /> Load Balancer
+                      </button>
+                    </li>
+                    <li>
+                      <button 
+                        onClick={() => handleSidebarClick('pap', papRef)}
+                        className="text-blue-600 font-medium flex items-center w-full text-left"
+                      >
+                        <Server size={14} className="mr-1" /> PAP Services
+                      </button>
+                    </li>
+                    <li>
+                      <button 
+                        onClick={() => handleSidebarClick('cloudPdp', cloudPdpRef)}
+                        className="text-gray-600 hover:text-blue-600 flex items-center w-full text-left"
+                      >
+                        <Cloud size={14} className="mr-1" /> Cloud PDP
+                      </button>
+                    </li>
                   </ul>
                 </div>
                 
                 <div className="border-l-4 border-green-500 pl-3 py-1">
                   <h4 className="font-medium text-green-800">Customer Environment</h4>
                   <ul className="mt-2 space-y-2 text-sm">
-                    <li><a href="#" className="text-gray-600 hover:text-green-600 flex items-center"><Shield size={14} className="mr-1" /> Agent</a></li>
-                    <li><a href="#" className="text-gray-600 hover:text-green-600 flex items-center"><Zap size={14} className="mr-1" /> PDP & PIP</a></li>
-                    <li><a href="#" className="text-gray-600 hover:text-green-600 flex items-center"><Box size={14} className="mr-1" /> Authorizers</a></li>
+                    <li>
+                      <button 
+                        onClick={() => handleSidebarClick('agent', agentRef)}
+                        className="text-gray-600 hover:text-green-600 flex items-center w-full text-left"
+                      >
+                        <Shield size={14} className="mr-1" /> Agent
+                      </button>
+                    </li>
+                    <li>
+                      <button 
+                        onClick={() => handleSidebarClick('pdp', pdpRef)}
+                        className="text-gray-600 hover:text-green-600 flex items-center w-full text-left"
+                      >
+                        <Zap size={14} className="mr-1" /> PDP & PIP
+                      </button>
+                    </li>
+                    <li>
+                      <button 
+                        onClick={() => handleSidebarClick('authorizers', authorizersRef)}
+                        className="text-gray-600 hover:text-green-600 flex items-center w-full text-left"
+                      >
+                        <Box size={14} className="mr-1" /> Authorizers
+                      </button>
+                    </li>
                   </ul>
                 </div>
                 
                 <div className="border-l-4 border-purple-500 pl-3 py-1">
                   <h4 className="font-medium text-purple-800">Customer's Managed Services</h4>
                   <ul className="mt-2 space-y-2 text-sm">
-                    <li><a href="#" className="text-gray-600 hover:text-purple-600 flex items-center"><Database size={14} className="mr-1" /> Postgres DB</a></li>
-                    <li><a href="#" className="text-gray-600 hover:text-purple-600 flex items-center"><Database size={14} className="mr-1" /> REDIS Store</a></li>
-                    <li><a href="#" className="text-gray-600 hover:text-purple-600 flex items-center"><Users size={14} className="mr-1" /> IDP</a></li>
+                    <li>
+                      <button 
+                        onClick={() => handleSidebarClick('postgres', postgresRef)}
+                        className="text-gray-600 hover:text-purple-600 flex items-center w-full text-left"
+                      >
+                        <Database size={14} className="mr-1" /> Postgres DB
+                      </button>
+                    </li>
+                    <li>
+                      <button 
+                        onClick={() => handleSidebarClick('customerRedis', customerRedisRef)}
+                        className="text-gray-600 hover:text-purple-600 flex items-center w-full text-left"
+                      >
+                        <Database size={14} className="mr-1" /> REDIS Store
+                      </button>
+                    </li>
+                    <li>
+                      <button 
+                        onClick={() => handleSidebarClick('idp', idpRef)}
+                        className="text-gray-600 hover:text-purple-600 flex items-center w-full text-left"
+                      >
+                        <Users size={14} className="mr-1" /> IDP
+                      </button>
+                    </li>
                   </ul>
                 </div>
               </div>
@@ -182,6 +275,7 @@ const ArchitectureDiagram = () => {
                 
                 <div className="flex justify-center space-x-4 mb-4">
                   <div 
+                    ref={lbRef}
                     className={`cursor-pointer p-3 rounded-lg ${activeComponent === 'lb' ? 'bg-blue-100 ring-2 ring-blue-400' : 'bg-gray-100'}`}
                     onClick={() => handleComponentClick('lb', { top: 250, left: 240 })}
                   >
@@ -192,6 +286,7 @@ const ArchitectureDiagram = () => {
                   </div>
                   
                   <div 
+                    ref={oauthRef}
                     className={`cursor-pointer p-3 rounded-lg ${activeComponent === 'oauth' ? 'bg-blue-100 ring-2 ring-blue-400' : 'bg-gray-100'}`}
                     onClick={() => handleComponentClick('oauth', { top: 250, left: 400 })}
                   >
@@ -204,6 +299,7 @@ const ArchitectureDiagram = () => {
                 
                 <div className="grid grid-cols-3 gap-4 mb-4">
                   <div 
+                    ref={papRef}
                     className={`cursor-pointer col-span-2 p-4 rounded-lg ${activeComponent === 'pap' ? 'bg-blue-100 ring-2 ring-blue-400' : 'bg-blue-500 text-white'}`}
                     onClick={() => handleComponentClick('pap', { top: 350, left: 320 })}
                   >
@@ -214,6 +310,7 @@ const ArchitectureDiagram = () => {
                   
                   <div className="space-y-4">
                     <div 
+                      ref={cloudPdpRef}
                       className={`cursor-pointer p-3 rounded-lg ${activeComponent === 'cloudPdp' ? 'bg-blue-100 ring-2 ring-blue-400 text-blue-800' : 'bg-blue-600 text-white'}`}
                       onClick={() => handleComponentClick('cloudPdp', { top: 320, left: 500 })}
                     >
@@ -224,6 +321,7 @@ const ArchitectureDiagram = () => {
                     </div>
                     
                     <div 
+                      ref={postgresRef}
                       className={`cursor-pointer p-3 rounded-lg ${activeComponent === 'postgres' ? 'bg-blue-100 ring-2 ring-blue-400' : 'bg-gray-100'}`}
                       onClick={() => handleComponentClick('postgres', { top: 400, left: 500 })}
                     >
@@ -234,6 +332,7 @@ const ArchitectureDiagram = () => {
                     </div>
                     
                     <div 
+                      ref={saasRedisRef}
                       className={`cursor-pointer p-3 rounded-lg ${activeComponent === 'saasRedis' ? 'bg-blue-100 ring-2 ring-blue-400' : 'bg-gray-100'}`}
                       onClick={() => handleComponentClick('saasRedis', { top: 480, left: 500 })}
                     >
@@ -265,6 +364,7 @@ const ArchitectureDiagram = () => {
                 
                 <div className="grid grid-cols-3 gap-4 mb-4">
                   <div 
+                    ref={agentRef}
                     className={`cursor-pointer col-span-2 p-4 rounded-lg ${activeComponent === 'agent' ? 'bg-green-100 ring-2 ring-green-400' : 'bg-green-500 text-white'}`}
                     onClick={() => handleComponentClick('agent', { top: 620, left: 320 })}
                   >
@@ -272,12 +372,14 @@ const ArchitectureDiagram = () => {
                     <div className="text-sm bg-green-400 bg-opacity-80 p-2 rounded-md mb-3">Agent</div>
                     <div className="grid grid-cols-2 gap-3">
                       <div 
+                        ref={pipRef}
                         className={`cursor-pointer p-2 rounded-md text-center ${activeComponent === 'pip' ? 'bg-white text-green-800' : 'bg-green-400 bg-opacity-80'}`}
                         onClick={(e) => { e.stopPropagation(); handleComponentClick('pip', { top: 670, left: 280 }); }}
                       >
                         <span className="text-sm">PIP Operator</span>
                       </div>
                       <div 
+                        ref={pdpRef}
                         className={`cursor-pointer p-2 rounded-md text-center ${activeComponent === 'pdp' ? 'bg-white text-green-800' : 'bg-green-400 bg-opacity-80'}`}
                         onClick={(e) => { e.stopPropagation(); handleComponentClick('pdp', { top: 670, left: 370 }); }}
                       >
@@ -310,6 +412,7 @@ const ArchitectureDiagram = () => {
                 </div>
                 
                 <div 
+                  ref={authorizersRef}
                   className={`cursor-pointer mb-4 p-3 rounded-lg ${activeComponent === 'authorizers' ? 'bg-green-100 ring-2 ring-green-400' : 'bg-teal-500 text-white'}`}
                   onClick={() => handleComponentClick('authorizers', { top: 740, left: 320 })}
                 >
@@ -329,6 +432,7 @@ const ArchitectureDiagram = () => {
                 
                 <div className="flex justify-center items-center space-x-6">
                   <div 
+                    ref={idpRef}
                     className={`cursor-pointer p-3 rounded-lg ${activeComponent === 'idp' ? 'bg-purple-100 ring-2 ring-purple-400' : 'bg-gray-100'}`}
                     onClick={() => handleComponentClick('idp', { top: 820, left: 240 })}
                   >
@@ -339,6 +443,7 @@ const ArchitectureDiagram = () => {
                   </div>
                   
                   <div 
+                    ref={customerRedisRef}
                     className={`cursor-pointer p-3 rounded-lg ${activeComponent === 'customerRedis' ? 'bg-purple-100 ring-2 ring-purple-400' : 'bg-gray-100'}`}
                     onClick={() => handleComponentClick('customerRedis', { top: 820, left: 400 })}
                   >
