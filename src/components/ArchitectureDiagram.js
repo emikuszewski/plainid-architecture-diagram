@@ -210,14 +210,6 @@ const ArchitectureDiagram = () => {
                   <ul className="mt-2 space-y-2 text-sm">
                     <li>
                       <button 
-                        onClick={() => handleSidebarClick('postgres', postgresRef)}
-                        className="text-gray-600 hover:text-purple-600 flex items-center w-full text-left"
-                      >
-                        <Database size={14} className="mr-1" /> Postgres DB
-                      </button>
-                    </li>
-                    <li>
-                      <button 
                         onClick={() => handleSidebarClick('customerRedis', customerRedisRef)}
                         className="text-gray-600 hover:text-purple-600 flex items-center w-full text-left"
                       >
