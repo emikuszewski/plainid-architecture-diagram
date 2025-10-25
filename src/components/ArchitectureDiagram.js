@@ -361,7 +361,7 @@ const ArchitectureDiagram = () => {
                     onClick={() => handleComponentClick('agent', { top: 620, left: 320 })}
                   >
                     <div className="font-medium mb-2">Policy Authorization Agent (PAA)</div>
-                    <div className="text-sm bg-green-400 bg-opacity-80 p-2 rounded-md mb-3">Agent</div>
+                    <div className="text-sm text-center bg-green-400 bg-opacity-80 p-2 rounded-md mb-3">Agent</div>
                     <div className="grid grid-cols-2 gap-3">
                       <div 
                         ref={pipRef}
