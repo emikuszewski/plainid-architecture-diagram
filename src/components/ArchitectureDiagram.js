@@ -1,10 +1,10 @@
 import React, { useState, useRef } from 'react';
-import { Server, Database, Cloud, Shield, ArrowDown, Users, Lock, Zap, Layers, Box, GitBranch, Info, Menu, X, ExternalLink, Home, Settings, HelpCircle } from 'lucide-react';
+import { Server, Database, Cloud, Shield, ArrowDown, Users, Lock, Zap, Layers, Box, GitBranch, Info, Menu, X, ExternalLink, Home, Settings, HelpCircle, ArrowRight } from 'lucide-react';
 
 const ArchitectureDiagram = () => {
   const [activeComponent, setActiveComponent] = useState(null);
   const [showTooltip, setShowTooltip] = useState(false);
-  const [tooltipContent, setTooltipContent] = useState({ title: '', description: '' });
+  const [tooltipContent, setTooltipContent] = useState({ title: '', description: '', connectsTo: [], dataFlow: { incoming: [], outgoing: [] } });
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
@@ -34,67 +34,142 @@ const ArchitectureDiagram = () => {
       const tooltips = {
         lb: {
           title: 'Load Balancer',
-          description: 'Distributes incoming traffic across multiple servers to ensure high availability and reliability.'
+          description: 'Distributes incoming traffic across multiple servers to ensure high availability and reliability.',
+          connectsTo: ['PAP Services', 'OAuth'],
+          dataFlow: {
+            incoming: ['User requests and authentication requests'],
+            outgoing: ['Routes traffic to PAP Services and OAuth for authentication']
+          }
         },
         oauth: {
           title: 'OAuth',
-          description: 'Handles authentication and provides secure tokens for authorization, enabling secure access to protected resources.'
+          description: 'Handles authentication and provides secure tokens for authorization, enabling secure access to protected resources.',
+          connectsTo: ['Load Balancer', 'IDP'],
+          dataFlow: {
+            incoming: ['Authentication requests from Load Balancer'],
+            outgoing: ['Communicates with IDP for identity verification', 'Returns authentication tokens']
+          }
         },
         pap: {
-          title: 'Policy Administration Point',
-          description: 'Central management system for defining, storing, and managing access policies. Serves as the policy source of truth.'
+          title: 'Policy Administration Point (PAP)',
+          description: 'Central management system for defining, storing, and managing access policies. Serves as the policy source of truth.',
+          connectsTo: ['Postgres DB', 'Agent Server', 'Customer Environment via Secured Tunnel'],
+          dataFlow: {
+            incoming: ['Requests from Load Balancer', 'Policy management operations'],
+            outgoing: ['Stores policies in Postgres DB', 'Sends policy updates to Agent Server', 'Communicates with Customer Agent via secured tunnel']
+          }
         },
         cloudPdp: {
           title: 'Cloud PDP',
-          description: 'Policy Decision Point in the cloud that evaluates access requests against policies and returns permit/deny decisions.'
+          description: 'Policy Decision Point in the cloud that evaluates access requests against policies and returns permit/deny decisions.',
+          connectsTo: ['REDIS Store (SaaS)'],
+          dataFlow: {
+            incoming: ['Policy evaluation requests'],
+            outgoing: ['Reads/writes policy cache to REDIS', 'Returns authorization decisions']
+          }
         },
         postgres: {
           title: 'PostgreSQL Database',
-          description: 'Stores policy definitions, configurations, and administrative data for the platform.'
+          description: 'Stores policy definitions, configurations, and administrative data for the platform.',
+          connectsTo: ['PAP Services'],
+          dataFlow: {
+            incoming: ['Policy definitions and configurations from PAP'],
+            outgoing: ['Provides stored policies to PAP Services']
+          }
         },
         saasRedis: {
           title: 'REDIS Cache (SaaS)',
-          description: 'High-performance cache used by services to optimize policy evaluation and decision-making.'
+          description: 'High-performance cache used by services to optimize policy evaluation and decision-making.',
+          connectsTo: ['Cloud PDP'],
+          dataFlow: {
+            incoming: ['Policy cache writes from Cloud PDP'],
+            outgoing: ['Fast policy cache reads to Cloud PDP']
+          }
         },
         tunnel: {
           title: 'Secured Communication Tunnel',
-          description: 'Encrypted connection between SaaS and customer environment that ensures secure and private data transfer.'
+          description: 'Encrypted connection between SaaS and customer environment that ensures secure and private data transfer.',
+          connectsTo: ['Agent Server (SaaS)', 'PlainID Agent (Customer)'],
+          dataFlow: {
+            incoming: ['Policy updates from Agent Server'],
+            outgoing: ['Encrypted policy distribution to Customer Agent', 'Status updates back to SaaS']
+          }
         },
         agent: {
           title: 'Agent',
-          description: 'Lightweight component deployed in the customer environment that handles policy enforcement and communicates with the SaaS platform.'
+          description: 'Lightweight component deployed in the customer environment that handles policy enforcement and communicates with the SaaS platform.',
+          connectsTo: ['Agent Server via Tunnel', 'PIP Operator', 'PDP', 'Customer Data Stores'],
+          dataFlow: {
+            incoming: ['Policy updates from SaaS via secured tunnel', 'Attribute data from Customer Data Stores'],
+            outgoing: ['Distributes policies to PDP', 'Requests attributes from PIP Operator', 'Status updates to SaaS']
+          }
         },
         pip: {
           title: 'PIP Operator',
-          description: 'Policy Information Point that gathers additional attributes and contextual information needed for policy evaluation.'
+          description: 'Policy Information Point that gathers additional attributes and contextual information needed for policy evaluation.',
+          connectsTo: ['Customer Data Stores', 'PDP'],
+          dataFlow: {
+            incoming: ['Attribute requests from PDP'],
+            outgoing: ['Fetches attributes from Customer Data Stores', 'Provides contextual information to PDP']
+          }
         },
         pdp: {
           title: 'Policy Decision Point',
-          description: 'Evaluates access requests against established policies and determines whether access should be granted or denied.'
+          description: 'Evaluates access requests against established policies and determines whether access should be granted or denied.',
+          connectsTo: ['PIP Operator', 'Customer REDIS', 'Authorizers', 'Customer Apps/Services'],
+          dataFlow: {
+            incoming: ['Authorization requests from Customer Apps/Services', 'Attributes from PIP Operator'],
+            outgoing: ['Policy cache to Customer REDIS', 'Authorization decisions to Authorizers']
+          }
         },
         authorizers: {
           title: 'Authorizers',
-          description: 'Components that enforce authorization decisions at various access points within the customer environment.'
+          description: 'Components that enforce authorization decisions at various access points within the customer environment.',
+          connectsTo: ['PDP', 'Customer Apps/Services'],
+          dataFlow: {
+            incoming: ['Authorization decisions from PDP'],
+            outgoing: ['Enforces policies at access points', 'Returns permit/deny to Customer Apps/Services']
+          }
         },
         dataStores: {
           title: 'Customer Data Stores',
-          description: 'Customer databases and data repositories that may require access control and policy enforcement.'
+          description: 'Customer databases and data repositories that may require access control and policy enforcement.',
+          connectsTo: ['PIP Operator'],
+          dataFlow: {
+            incoming: ['Attribute and context requests from PIP Operator'],
+            outgoing: ['Provides user attributes, roles, and contextual data for policy evaluation']
+          }
         },
         customerApps: {
           title: 'Customer Apps/Services',
-          description: 'Applications and services that integrate with authorization for access control capabilities.'
+          description: 'Applications and services that integrate with authorization for access control capabilities.',
+          connectsTo: ['PDP', 'Authorizers'],
+          dataFlow: {
+            incoming: ['Authorization responses from Authorizers'],
+            outgoing: ['Sends authorization requests to PDP', 'Enforces access control based on decisions']
+          }
         },
         idp: {
           title: 'Identity Provider (IDP)',
-          description: 'Manages user identities and authentication, providing verified identity information to the authorization system.'
+          description: 'Manages user identities and authentication, providing verified identity information to the authorization system.',
+          connectsTo: ['OAuth'],
+          dataFlow: {
+            incoming: ['Authentication requests from OAuth'],
+            outgoing: ['Verified user identity information', 'Authentication tokens and claims']
+          }
         },
         customerRedis: {
           title: 'Customer REDIS Store',
-          description: 'Customer-managed REDIS instance used for high-performance caching and data access.'
+          description: 'Customer-managed REDIS instance used for high-performance caching and data access.',
+          connectsTo: ['PDP'],
+          dataFlow: {
+            incoming: ['Policy cache writes from PDP'],
+            outgoing: ['Fast policy cache reads to PDP for authorization decisions']
+          }
         }
       };
       
-      setTooltipContent(tooltips[component] || { title: 'Component', description: 'No description available' });
+      setTooltipContent(tooltips[component] || { title: 'Component', description: 'No description available', connectsTo: [], dataFlow: { incoming: [], outgoing: [] } });
     }
   };
 
@@ -447,10 +522,10 @@ const ArchitectureDiagram = () => {
                 </div>
               </div>
               
-              {/* Tooltip */}
+              {/* Enhanced Tooltip with Data Flows */}
               {showTooltip && (
                 <div 
-                  className="absolute z-10 bg-white rounded-lg shadow-lg border border-gray-200 p-4 w-72"
+                  className="absolute z-10 bg-white rounded-lg shadow-lg border border-gray-200 p-4 w-96 max-h-[600px] overflow-y-auto"
                   style={{ 
                     top: tooltipPosition.top,
                     left: tooltipPosition.left > 400 ? 'auto' : tooltipPosition.left,
@@ -458,8 +533,8 @@ const ArchitectureDiagram = () => {
                     transform: 'translateY(10px)'
                   }}
                 >
-                  <div className="flex justify-between items-start">
-                    <h4 className="font-medium text-blue-800">{tooltipContent.title}</h4>
+                  <div className="flex justify-between items-start mb-3">
+                    <h4 className="font-medium text-blue-800 text-lg">{tooltipContent.title}</h4>
                     <button 
                       className="text-gray-400 hover:text-gray-600"
                       onClick={() => setShowTooltip(false)}
@@ -467,8 +542,60 @@ const ArchitectureDiagram = () => {
                       ✕
                     </button>
                   </div>
-                  <p className="text-sm text-gray-600 mt-2">{tooltipContent.description}</p>
-                  <div className="mt-3 pt-2 border-t border-gray-100 flex justify-end">
+                  
+                  <p className="text-sm text-gray-600 mb-4">{tooltipContent.description}</p>
+                  
+                  {/* Connects To Section */}
+                  {tooltipContent.connectsTo && tooltipContent.connectsTo.length > 0 && (
+                    <div className="mb-4">
+                      <h5 className="font-medium text-gray-800 text-sm mb-2 flex items-center">
+                        <GitBranch size={14} className="mr-1" />
+                        Connects To:
+                      </h5>
+                      <ul className="space-y-1">
+                        {tooltipContent.connectsTo.map((connection, index) => (
+                          <li key={index} className="text-xs text-gray-600 flex items-start">
+                            <ArrowRight size={12} className="mr-1 mt-0.5 flex-shrink-0 text-blue-500" />
+                            <span>{connection}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  
+                  {/* Data Flow Section */}
+                  {(tooltipContent.dataFlow.incoming.length > 0 || tooltipContent.dataFlow.outgoing.length > 0) && (
+                    <div className="border-t border-gray-200 pt-3">
+                      <h5 className="font-medium text-gray-800 text-sm mb-2 flex items-center">
+                        <Zap size={14} className="mr-1" />
+                        Data Flow:
+                      </h5>
+                      
+                      {tooltipContent.dataFlow.incoming.length > 0 && (
+                        <div className="mb-3">
+                          <p className="text-xs font-medium text-green-700 mb-1">⬇ Incoming:</p>
+                          <ul className="space-y-1">
+                            {tooltipContent.dataFlow.incoming.map((flow, index) => (
+                              <li key={index} className="text-xs text-gray-600 pl-3">• {flow}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      
+                      {tooltipContent.dataFlow.outgoing.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-blue-700 mb-1">⬆ Outgoing:</p>
+                          <ul className="space-y-1">
+                            {tooltipContent.dataFlow.outgoing.map((flow, index) => (
+                              <li key={index} className="text-xs text-gray-600 pl-3">• {flow}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end">
                     <a href="https://docs.plainid.io/docs/architecture-diagram-and-high-level-components-1" target="_blank" rel="noopener noreferrer" className="text-blue-600 text-sm hover:text-blue-800 flex items-center">
                       Learn more <ExternalLink size={14} className="ml-1" />
                     </a>
@@ -520,4 +647,5 @@ const ArchitectureDiagram = () => {
     </div>
   );
 };
+
 export default ArchitectureDiagram;
