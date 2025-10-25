@@ -520,5 +520,4 @@ const ArchitectureDiagram = () => {
     </div>
   );
 };
-
 export default ArchitectureDiagram;
