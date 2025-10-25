@@ -91,7 +91,7 @@ const ArchitectureDiagram = () => {
         <div className="container mx-auto px-4 py-3">
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-2">
-              <span className="text-xl font-bold text-gray-800">Authorization Architecture</span>
+              <span className="text-xl font-bold text-gray-800">PlainID Platform Architecture</span>
             </div>
           </div>
         </div>
@@ -102,7 +102,7 @@ const ArchitectureDiagram = () => {
         {/* Page Header */}
         <div className="mb-6">
           <p className="text-gray-600">
-            Interactive visualization of the authorization platform architecture. Click on any component to learn more.
+            Interactive visualization of the PlainID platform architecture. Click on any component to learn more.
           </p>
         </div>
         
