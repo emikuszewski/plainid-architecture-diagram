@@ -134,7 +134,7 @@ const ArchitectureDiagram = () => {
                 </div>
                 
                 <div className="border-l-4 border-purple-500 pl-3 py-1">
-                  <h4 className="font-medium text-purple-800">Managed Services</h4>
+                  <h4 className="font-medium text-purple-800">Customer's Managed Services</h4>
                   <ul className="mt-2 space-y-2 text-sm">
                     <li><a href="#" className="text-gray-600 hover:text-purple-600 flex items-center"><Database size={14} className="mr-1" /> Postgres DB</a></li>
                     <li><a href="#" className="text-gray-600 hover:text-purple-600 flex items-center"><Database size={14} className="mr-1" /> REDIS Store</a></li>
@@ -394,7 +394,7 @@ const ArchitectureDiagram = () => {
                 </div>
                 <div className="flex items-center">
                   <div className="w-4 h-4 rounded-full bg-purple-500 mr-2"></div>
-                  <span className="text-sm">Managed Services</span>
+                  <span className="text-sm">Customer's Managed Services</span>
                 </div>
                 <div className="flex items-center">
                   <Database size={16} className="text-red-600 mr-2" />
