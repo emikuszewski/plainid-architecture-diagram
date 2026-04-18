@@ -1,651 +1,1002 @@
-import React, { useState, useRef } from 'react';
-import { Server, Database, Cloud, Shield, ArrowDown, Users, Lock, Zap, Layers, Box, GitBranch, Info, Menu, X, ExternalLink, Home, Settings, HelpCircle, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { ExternalLink, Play, Pause, ChevronLeft, ChevronRight, X, ArrowRight } from 'lucide-react';
 
-const ArchitectureDiagram = () => {
-  const [activeComponent, setActiveComponent] = useState(null);
-  const [showTooltip, setShowTooltip] = useState(false);
-  const [tooltipContent, setTooltipContent] = useState({ title: '', description: '', connectsTo: [], dataFlow: { incoming: [], outgoing: [] } });
-  const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
+// ============================================================================
+// DATA
+// ============================================================================
 
-  // Create refs for each component
-  const lbRef = useRef(null);
-  const oauthRef = useRef(null);
-  const papRef = useRef(null);
-  const cloudPdpRef = useRef(null);
-  const agentRef = useRef(null);
-  const pipRef = useRef(null);
-  const pdpRef = useRef(null);
-  const authorizersRef = useRef(null);
-  const postgresRef = useRef(null);
-  const saasRedisRef = useRef(null);
-  const customerRedisRef = useRef(null);
-  const idpRef = useRef(null);
+const DOCS_BASE = 'https://docs.plainid.io';
 
-  const handleComponentClick = (component, position) => {
-    setActiveComponent(component === activeComponent ? null : component);
-    
-    if (component === activeComponent) {
-      setShowTooltip(false);
-    } else {
-      setShowTooltip(true);
-      setTooltipPosition(position);
-      
-      const tooltips = {
-        lb: {
-          title: 'Load Balancer',
-          description: 'Distributes incoming traffic across multiple servers to ensure high availability and reliability.',
-          connectsTo: ['PAP Services', 'OAuth'],
-          dataFlow: {
-            incoming: ['User requests and authentication requests'],
-            outgoing: ['Routes traffic to PAP Services and OAuth for authentication']
-          }
-        },
-        oauth: {
-          title: 'OAuth',
-          description: 'Handles authentication and provides secure tokens for authorization, enabling secure access to protected resources.',
-          connectsTo: ['Load Balancer', 'IDP'],
-          dataFlow: {
-            incoming: ['Authentication requests from Load Balancer'],
-            outgoing: ['Communicates with IDP for identity verification', 'Returns authentication tokens']
-          }
-        },
-        pap: {
-          title: 'Policy Administration Point (PAP)',
-          description: 'Central management system for defining, storing, and managing access policies. Serves as the policy source of truth.',
-          connectsTo: ['Postgres DB', 'Agent Server', 'Customer Environment via Secured Tunnel'],
-          dataFlow: {
-            incoming: ['Requests from Load Balancer', 'Policy management operations'],
-            outgoing: ['Stores policies in Postgres DB', 'Sends policy updates to Agent Server', 'Communicates with Customer Agent via secured tunnel']
-          }
-        },
-        cloudPdp: {
-          title: 'Cloud PDP',
-          description: 'Policy Decision Point in the cloud that evaluates access requests against policies and returns permit/deny decisions.',
-          connectsTo: ['REDIS Store (SaaS)'],
-          dataFlow: {
-            incoming: ['Policy evaluation requests'],
-            outgoing: ['Reads/writes policy cache to REDIS', 'Returns authorization decisions']
-          }
-        },
-        postgres: {
-          title: 'PostgreSQL Database',
-          description: 'Stores policy definitions, configurations, and administrative data for the platform.',
-          connectsTo: ['PAP Services'],
-          dataFlow: {
-            incoming: ['Policy definitions and configurations from PAP'],
-            outgoing: ['Provides stored policies to PAP Services']
-          }
-        },
-        saasRedis: {
-          title: 'REDIS Cache (SaaS)',
-          description: 'High-performance cache used by services to optimize policy evaluation and decision-making.',
-          connectsTo: ['Cloud PDP'],
-          dataFlow: {
-            incoming: ['Policy cache writes from Cloud PDP'],
-            outgoing: ['Fast policy cache reads to Cloud PDP']
-          }
-        },
-        tunnel: {
-          title: 'Secured Communication Tunnel',
-          description: 'Encrypted connection between SaaS and customer environment that ensures secure and private data transfer.',
-          connectsTo: ['Agent Server (SaaS)', 'PlainID Agent (Customer)'],
-          dataFlow: {
-            incoming: ['Policy updates from Agent Server'],
-            outgoing: ['Encrypted policy distribution to Customer Agent', 'Status updates back to SaaS']
-          }
-        },
-        agent: {
-          title: 'Agent',
-          description: 'Lightweight component deployed in the customer environment that handles policy enforcement and communicates with the SaaS platform.',
-          connectsTo: ['Agent Server via Tunnel', 'PIP Operator', 'PDP', 'Customer Data Stores'],
-          dataFlow: {
-            incoming: ['Policy updates from SaaS via secured tunnel', 'Attribute data from Customer Data Stores'],
-            outgoing: ['Distributes policies to PDP', 'Requests attributes from PIP Operator', 'Status updates to SaaS']
-          }
-        },
-        pip: {
-          title: 'PIP Operator',
-          description: 'Policy Information Point that gathers additional attributes and contextual information needed for policy evaluation.',
-          connectsTo: ['Customer Data Stores', 'PDP'],
-          dataFlow: {
-            incoming: ['Attribute requests from PDP'],
-            outgoing: ['Fetches attributes from Customer Data Stores', 'Provides contextual information to PDP']
-          }
-        },
-        pdp: {
-          title: 'Policy Decision Point',
-          description: 'Evaluates access requests against established policies and determines whether access should be granted or denied.',
-          connectsTo: ['PIP Operator', 'Customer REDIS', 'Authorizers', 'Customer Apps/Services'],
-          dataFlow: {
-            incoming: ['Authorization requests from Customer Apps/Services', 'Attributes from PIP Operator'],
-            outgoing: ['Policy cache to Customer REDIS', 'Authorization decisions to Authorizers']
-          }
-        },
-        authorizers: {
-          title: 'Authorizers',
-          description: 'Components that enforce authorization decisions at various access points within the customer environment.',
-          connectsTo: ['PDP', 'Customer Apps/Services'],
-          dataFlow: {
-            incoming: ['Authorization decisions from PDP'],
-            outgoing: ['Enforces policies at access points', 'Returns permit/deny to Customer Apps/Services']
-          }
-        },
-        dataStores: {
-          title: 'Customer Data Stores',
-          description: 'Customer databases and data repositories that may require access control and policy enforcement.',
-          connectsTo: ['PIP Operator'],
-          dataFlow: {
-            incoming: ['Attribute and context requests from PIP Operator'],
-            outgoing: ['Provides user attributes, roles, and contextual data for policy evaluation']
-          }
-        },
-        customerApps: {
-          title: 'Customer Apps/Services',
-          description: 'Applications and services that integrate with authorization for access control capabilities.',
-          connectsTo: ['PDP', 'Authorizers'],
-          dataFlow: {
-            incoming: ['Authorization responses from Authorizers'],
-            outgoing: ['Sends authorization requests to PDP', 'Enforces access control based on decisions']
-          }
-        },
-        idp: {
-          title: 'Identity Provider (IDP)',
-          description: 'Manages user identities and authentication, providing verified identity information to the authorization system.',
-          connectsTo: ['OAuth'],
-          dataFlow: {
-            incoming: ['Authentication requests from OAuth'],
-            outgoing: ['Verified user identity information', 'Authentication tokens and claims']
-          }
-        },
-        customerRedis: {
-          title: 'Customer REDIS Store',
-          description: 'Customer-managed REDIS instance used for high-performance caching and data access.',
-          connectsTo: ['PDP'],
-          dataFlow: {
-            incoming: ['Policy cache writes from PDP'],
-            outgoing: ['Fast policy cache reads to PDP for authorization decisions']
-          }
-        }
-      };
-      
-      setTooltipContent(tooltips[component] || { title: 'Component', description: 'No description available', connectsTo: [], dataFlow: { incoming: [], outgoing: [] } });
+const COMPONENTS = {
+  // ---- SaaS control plane ----
+  'policy-admin': {
+    name: 'Policy admin',
+    fullName: 'Policy Administration Point',
+    zone: 'saas',
+    serviceName: 'policy-admin',
+    version: 'v5.2611',
+    port: '443',
+    protocol: 'HTTPS · REST',
+    status: 'healthy',
+    description: 'Central UI where administrators author, version, and publish policies. Policies flow from here to every connected PAA through the secured sync channel.',
+    connectsTo: ['Platform storage', 'Agent server', 'PAA sync channel'],
+    dataFlow: {
+      incoming: ['Admin UI actions', 'Policy authoring API calls'],
+      outgoing: ['Published policies', 'Audit events']
+    },
+    docsPath: '/docs/administration-portal'
+  },
+  'platform-storage': {
+    name: 'Platform storage',
+    fullName: 'Tenant storage',
+    zone: 'saas',
+    serviceName: 'tenant-store',
+    version: 'pg15 + redis7',
+    protocol: 'Postgres + Redis',
+    status: 'healthy',
+    description: 'Durable store for tenant policies and compiled authorization artifacts. Postgres holds policy definitions and audit data; Redis manages sync channel state and compiled artifact cache.',
+    connectsTo: ['Policy admin', 'Agent server'],
+    dataFlow: {
+      incoming: ['Policy writes from PAP', 'Sync state updates'],
+      outgoing: ['Policy reads', 'Compiled artifact reads', 'Sync payloads to PAAs']
+    },
+    docsPath: '/docs/administration-portal'
+  },
+  'cloud-pdp': {
+    name: 'Cloud PDP',
+    fullName: 'Cloud-hosted Policy Decision Point',
+    zone: 'saas',
+    serviceName: 'cloud-pdp',
+    version: 'v5.2611',
+    port: '443',
+    protocol: 'HTTPS',
+    status: 'optional',
+    technicalOnly: true,
+    description: 'Optional SaaS-hosted PDP for deployments that do not require customer-hosted evaluation. Shares the same engine as the PAA runtime but operates from the control plane.',
+    connectsTo: ['Platform storage', 'Policy admin'],
+    dataFlow: {
+      incoming: ['Authorization requests from SaaS apps'],
+      outgoing: ['Decisions with obligations']
+    },
+    docsPath: '/docs/administration-portal'
+  },
+  'agent-server': {
+    name: 'Agent server',
+    fullName: 'PAA control channel endpoint',
+    zone: 'saas',
+    serviceName: 'agent-server',
+    version: 'v5.2611',
+    port: '8883',
+    protocol: 'MQTT/TLS · persistent',
+    status: 'healthy',
+    technicalOnly: true,
+    description: 'SaaS-side endpoint for the persistent outbound control channel from every PAA. Handles policy distribution, health monitoring, and control plane commands.',
+    connectsTo: ['Platform storage', 'Policy admin', 'All connected PAAs'],
+    dataFlow: {
+      incoming: ['PAA health reports', 'PAA subscription requests'],
+      outgoing: ['Policy sync payloads', 'Configuration updates']
+    },
+    docsPath: '/docs/administration-portal'
+  },
+
+  // ---- PAA data plane ----
+  'pdp': {
+    name: 'PDP',
+    fullName: 'Policy Decision Point',
+    zone: 'paa',
+    serviceName: 'runtime',
+    version: 'v5.2611',
+    port: '8080',
+    protocol: 'HTTPS · ext_authz',
+    status: 'healthy',
+    description: 'Evaluates authorization policies against request context and returns permit or deny with optional obligations. Runs locally inside the PAA for sub-millisecond latency and to keep all PII within the customer boundary.',
+    connectsTo: ['PIP', 'Authorizers', 'Local policy cache (Redis)'],
+    dataFlow: {
+      incoming: ['Authorization requests from authorizers', 'Synced policies from SaaS'],
+      outgoing: ['Permit or deny decisions', 'Obligations (filters, masks)']
+    },
+    technical: {
+      latencyCached: '<1ms',
+      latencyPipResolve: '~8ms',
+      policyModels: 'ABAC · RBAC · ReBAC',
+      deployment: 'Helm chart · standalone · sidecar',
+      healthEndpoint: 'GET /api/version',
+      tags: ['stateless', 'in-cluster', 'jwt-validated', 'horizontally-scaled']
+    },
+    docsPath: '/docs/administration-portal',
+    deepDive: true
+  },
+  'pip': {
+    name: 'PIP',
+    fullName: 'Policy Information Point',
+    zone: 'paa',
+    serviceName: 'pip-operator',
+    version: 'v5.2611',
+    port: '8080',
+    protocol: 'LDAP · JDBC · REST',
+    status: 'healthy',
+    description: 'Resolves attributes the PDP needs to evaluate a policy — user entitlements, resource metadata, relationship graphs. Queries customer data sources on demand through pluggable connectors.',
+    connectsTo: ['PDP', 'Data stores', 'IdP'],
+    dataFlow: {
+      incoming: ['Attribute requests from PDP'],
+      outgoing: ['Resolved attributes', 'Attribute cache updates']
+    },
+    docsPath: '/docs/administration-portal'
+  },
+  'agent': {
+    name: 'Agent',
+    fullName: 'PAA control plane client',
+    zone: 'paa',
+    serviceName: 'agent',
+    version: 'v5.2611',
+    protocol: 'MQTT · local Redis sync',
+    status: 'healthy',
+    technicalOnly: true,
+    description: 'PAA control plane client. Maintains the persistent outbound tunnel to the SaaS agent-server, syncs policies to local Redis, and reports health back to the tenant.',
+    connectsTo: ['Agent server (SaaS)', 'Local Redis', 'PDP', 'PIP'],
+    dataFlow: {
+      incoming: ['Policy sync payloads', 'Configuration updates'],
+      outgoing: ['Health reports', 'Subscription heartbeats']
+    },
+    docsPath: '/docs/administration-portal'
+  },
+
+  // ---- Authorizers (customer PEP layer) ----
+  'envoy': {
+    name: 'Envoy sidecar',
+    fullName: 'Istio Envoy HTTP filter',
+    zone: 'authorizer',
+    serviceName: 'envoy-sidecar',
+    protocol: 'Istio · HTTP filter',
+    status: 'healthy',
+    description: 'Envoy sidecar authorizer deployed alongside service pods. Intercepts inbound HTTP traffic and calls the PDP via ext_authz filter before forwarding to the protected service.',
+    connectsTo: ['PDP', 'Apps'],
+    dataFlow: {
+      incoming: ['HTTP requests to protected services'],
+      outgoing: ['Authorization requests to PDP', 'Forwarded or denied traffic']
+    },
+    docsPath: '/docs/administration-portal'
+  },
+  'langchain-mcp': {
+    name: 'LangChain + MCP',
+    fullName: 'AI authorizer suite',
+    zone: 'authorizer',
+    serviceName: 'ai-authorizers',
+    protocol: 'Python · JSON-RPC',
+    status: 'healthy',
+    description: 'Authorization wrappers for AI systems. LangChain authorizer implements the three-guardrail pattern (Categorizer, Retriever Filter, Anonymizer). MCP gateway enforces tool-level authorization for agent workflows.',
+    connectsTo: ['PDP', 'AI agents'],
+    dataFlow: {
+      incoming: ['LangChain chain invocations', 'MCP tool calls'],
+      outgoing: ['Authorization requests to PDP', 'Filtered or blocked chain outputs']
+    },
+    docsPath: '/docs/administration-portal'
+  },
+  'sql-authorizer': {
+    name: 'SQL authorizer',
+    fullName: 'Database authorization plugin',
+    zone: 'authorizer',
+    serviceName: 'sql-authorizer',
+    protocol: 'DDL · row/col filter',
+    status: 'healthy',
+    description: 'Database-side authorizer that injects policy-based filters into SQL queries at the DDL layer. Enforces row-level and column-level access without requiring application changes.',
+    connectsTo: ['PDP', 'Data stores'],
+    dataFlow: {
+      incoming: ['SQL queries from applications'],
+      outgoing: ['Policy-filtered queries', 'Authorization requests to PDP']
+    },
+    docsPath: '/docs/administration-portal'
+  },
+
+  // ---- Customer resources ----
+  'apps': {
+    name: 'Apps',
+    fullName: 'Protected applications',
+    zone: 'resource',
+    serviceName: 'apps',
+    description: 'Customer-owned applications and services protected by PlainID authorization — web apps, REST APIs, gRPC services.',
+    connectsTo: ['Envoy sidecar', 'IdP'],
+    dataFlow: {
+      incoming: ['User sessions with IdP tokens', 'Authorized traffic from Envoy'],
+      outgoing: ['Enforced responses']
     }
-  };
-
-  const handleSidebarClick = (component, ref) => {
-    setActiveComponent(component);
-    setShowTooltip(false);
-    
-    if (ref && ref.current) {
-      ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  },
+  'ai-agents': {
+    name: 'AI agents',
+    fullName: 'LLM chains and autonomous agents',
+    zone: 'resource',
+    serviceName: 'ai-agents',
+    description: 'AI systems protected by the LangChain and MCP authorizers — LLM-driven chains, autonomous agents, and MCP-enabled tool-using assistants.',
+    connectsTo: ['LangChain + MCP', 'Data stores'],
+    dataFlow: {
+      incoming: ['User prompts', 'Authorized data context'],
+      outgoing: ['Filtered responses', 'Tool invocations']
     }
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header - simplified with no navigation elements */}
-      <header className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-2">
-              <span className="text-xl font-bold text-gray-800">PlainID Platform Architecture</span>
-            </div>
-          </div>
-        </div>
-      </header>
-      
-      {/* Page Content */}
-      <main className="container mx-auto px-4 py-6">
-        {/* Page Header */}
-        <div className="mb-6">
-          <p className="text-gray-600">
-            Interactive visualization of the PlainID platform architecture. Click on any component to learn more.
-          </p>
-        </div>
-        
-        {/* Content Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Sidebar */}
-          <div className="hidden lg:block">
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 sticky top-6">
-              <h3 className="text-lg font-medium text-gray-800 mb-4">Architecture Components</h3>
-              
-              <div className="space-y-3">
-                <div className="border-l-4 border-blue-500 pl-3 py-1">
-                  <h4 className="font-medium text-blue-800">PlainID SaaS Platform</h4>
-                  <ul className="mt-2 space-y-2 text-sm">
-                    <li>
-                      <button 
-                        onClick={() => handleSidebarClick('oauth', oauthRef)}
-                        className="text-gray-600 hover:text-blue-600 flex items-center w-full text-left"
-                      >
-                        <Lock size={14} className="mr-1" /> OAuth
-                      </button>
-                    </li>
-                    <li>
-                      <button 
-                        onClick={() => handleSidebarClick('lb', lbRef)}
-                        className="text-gray-600 hover:text-blue-600 flex items-center w-full text-left"
-                      >
-                        <GitBranch size={14} className="mr-1" /> Load Balancer
-                      </button>
-                    </li>
-                    <li>
-                      <button 
-                        onClick={() => handleSidebarClick('pap', papRef)}
-                        className="text-blue-600 font-medium flex items-center w-full text-left"
-                      >
-                        <Server size={14} className="mr-1" /> PAP Services
-                      </button>
-                    </li>
-                    <li>
-                      <button 
-                        onClick={() => handleSidebarClick('cloudPdp', cloudPdpRef)}
-                        className="text-gray-600 hover:text-blue-600 flex items-center w-full text-left"
-                      >
-                        <Cloud size={14} className="mr-1" /> Cloud PDP
-                      </button>
-                    </li>
-                  </ul>
-                </div>
-                
-                <div className="border-l-4 border-green-500 pl-3 py-1">
-                  <h4 className="font-medium text-green-800">Customer Environment</h4>
-                  <ul className="mt-2 space-y-2 text-sm">
-                    <li>
-                      <button 
-                        onClick={() => handleSidebarClick('agent', agentRef)}
-                        className="text-gray-600 hover:text-green-600 flex items-center w-full text-left"
-                      >
-                        <Shield size={14} className="mr-1" /> Agent
-                      </button>
-                    </li>
-                    <li>
-                      <button 
-                        onClick={() => handleSidebarClick('pdp', pdpRef)}
-                        className="text-gray-600 hover:text-green-600 flex items-center w-full text-left"
-                      >
-                        <Zap size={14} className="mr-1" /> PDP & PIP
-                      </button>
-                    </li>
-                    <li>
-                      <button 
-                        onClick={() => handleSidebarClick('authorizers', authorizersRef)}
-                        className="text-gray-600 hover:text-green-600 flex items-center w-full text-left"
-                      >
-                        <Box size={14} className="mr-1" /> Authorizers
-                      </button>
-                    </li>
-                  </ul>
-                </div>
-                
-                <div className="border-l-4 border-purple-500 pl-3 py-1">
-                  <h4 className="font-medium text-purple-800">Customer's Managed Services</h4>
-                  <ul className="mt-2 space-y-2 text-sm">
-                    <li>
-                      <button 
-                        onClick={() => handleSidebarClick('customerRedis', customerRedisRef)}
-                        className="text-gray-600 hover:text-purple-600 flex items-center w-full text-left"
-                      >
-                        <Database size={14} className="mr-1" /> REDIS Store
-                      </button>
-                    </li>
-                    <li>
-                      <button 
-                        onClick={() => handleSidebarClick('idp', idpRef)}
-                        className="text-gray-600 hover:text-purple-600 flex items-center w-full text-left"
-                      >
-                        <Users size={14} className="mr-1" /> IDP
-                      </button>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-              
-              <div className="mt-6 pt-4 border-t border-gray-200">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Resources</h4>
-                <ul className="space-y-2 text-sm">
-                  <li><a href="https://docs.plainid.io/docs/architecture-diagram-and-high-level-components-1" target="_blank" rel="noopener noreferrer" className="text-gray-600 hover:text-blue-600 flex items-center"><ExternalLink size={14} className="mr-2" /> Documentation</a></li>
-                  <li><a href="https://docs.plainid.io/docs/architecture-diagram-and-high-level-components-1" target="_blank" rel="noopener noreferrer" className="text-gray-600 hover:text-blue-600 flex items-center"><ExternalLink size={14} className="mr-2" /> Deployment Guide</a></li>
-                  <li><a href="https://docs.plainid.io/docs/architecture-diagram-and-high-level-components-1" target="_blank" rel="noopener noreferrer" className="text-gray-600 hover:text-blue-600 flex items-center"><ExternalLink size={14} className="mr-2" /> API Reference</a></li>
-                </ul>
-              </div>
-            </div>
-          </div>
-          
-          {/* Main Content */}
-          <div className="lg:col-span-3">
-            {/* Info Card */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 flex items-start">
-              <Info size={24} className="text-blue-600 mr-3 flex-shrink-0 mt-1" />
-              <div>
-                <h3 className="text-blue-800 font-medium mb-1">Understanding the Architecture</h3>
-                <p className="text-sm text-gray-700">
-                  The architecture consists of a SaaS platform and components deployed in the customer environment.
-                  The components communicate securely to enforce authorization policies across your applications and services.
-                  Click on any component in the diagram below to learn more about its role in the architecture.
-                </p>
-              </div>
-            </div>
-            
-            {/* Interactive Diagram */}
-            <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6 mb-6 relative">
-              <h3 className="text-lg font-medium text-gray-800 mb-4">Interactive Architecture Diagram</h3>
-              
-              {/* SaaS Platform */}
-              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 mb-6">
-                <div className="flex justify-between items-center mb-3">
-                  <h3 className="font-medium text-blue-800">PlainID SaaS Platform</h3>
-                  <Cloud size={20} className="text-blue-600" />
-                </div>
-                
-                <div className="flex justify-center space-x-4 mb-4">
-                  <div 
-                    ref={lbRef}
-                    className={`cursor-pointer p-3 rounded-lg ${activeComponent === 'lb' ? 'bg-blue-100 ring-2 ring-blue-400' : 'bg-gray-100'}`}
-                    onClick={() => handleComponentClick('lb', { top: 250, left: 240 })}
-                  >
-                    <div className="flex flex-col items-center">
-                      <GitBranch size={24} className="text-blue-600" />
-                      <span className="text-sm mt-1">Load Balancer</span>
-                    </div>
-                  </div>
-                  
-                  <div 
-                    ref={oauthRef}
-                    className={`cursor-pointer p-3 rounded-lg ${activeComponent === 'oauth' ? 'bg-blue-100 ring-2 ring-blue-400' : 'bg-gray-100'}`}
-                    onClick={() => handleComponentClick('oauth', { top: 250, left: 400 })}
-                  >
-                    <div className="flex flex-col items-center">
-                      <Lock size={24} className="text-blue-600" />
-                      <span className="text-sm mt-1">OAuth</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-3 gap-4 mb-4">
-                  <div 
-                    ref={papRef}
-                    className={`cursor-pointer col-span-2 p-4 rounded-lg ${activeComponent === 'pap' ? 'bg-blue-100 ring-2 ring-blue-400' : 'bg-blue-500 text-white'}`}
-                    onClick={() => handleComponentClick('pap', { top: 350, left: 320 })}
-                  >
-                    <div className="font-medium mb-2">Policy Administration Point (PAP)</div>
-                    <div className="text-sm bg-blue-400 bg-opacity-80 p-2 rounded-md mb-2">PAP Services</div>
-                    <div className="text-sm bg-blue-400 bg-opacity-80 p-2 rounded-md">Agent Server</div>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div 
-                      ref={cloudPdpRef}
-                      className={`cursor-pointer p-3 rounded-lg ${activeComponent === 'cloudPdp' ? 'bg-blue-100 ring-2 ring-blue-400 text-blue-800' : 'bg-blue-600 text-white'}`}
-                      onClick={() => handleComponentClick('cloudPdp', { top: 320, left: 500 })}
-                    >
-                      <div className="flex flex-col items-center">
-                        <Cloud size={20} className={activeComponent === 'cloudPdp' ? 'text-blue-600' : 'text-white'} />
-                        <span className="text-sm mt-1">Cloud PDP</span>
-                      </div>
-                    </div>
-                    
-                    <div 
-                      ref={postgresRef}
-                      className={`cursor-pointer p-3 rounded-lg ${activeComponent === 'postgres' ? 'bg-blue-100 ring-2 ring-blue-400' : 'bg-gray-100'}`}
-                      onClick={() => handleComponentClick('postgres', { top: 400, left: 500 })}
-                    >
-                      <div className="flex flex-col items-center">
-                        <Database size={20} className="text-blue-600" />
-                        <span className="text-sm mt-1">Postgres DB</span>
-                      </div>
-                    </div>
-                    
-                    <div 
-                      ref={saasRedisRef}
-                      className={`cursor-pointer p-3 rounded-lg ${activeComponent === 'saasRedis' ? 'bg-blue-100 ring-2 ring-blue-400' : 'bg-gray-100'}`}
-                      onClick={() => handleComponentClick('saasRedis', { top: 480, left: 500 })}
-                    >
-                      <div className="flex flex-col items-center">
-                        <Database size={20} className="text-red-600" />
-                        <span className="text-sm mt-1">REDIS Store</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Communication Tunnel */}
-              <div 
-                className={`cursor-pointer flex justify-center items-center py-3 mb-6 border border-dashed ${activeComponent === 'tunnel' ? 'border-blue-500 bg-blue-50' : 'border-gray-400'}`}
-                onClick={() => handleComponentClick('tunnel', { top: 540, left: 320 })}
-              >
-                <Lock size={16} className={activeComponent === 'tunnel' ? 'text-blue-600 mr-1' : 'text-gray-600 mr-1'} />
-                <span className="font-medium">Secured Communication Tunnel</span>
-                <ArrowDown size={16} className={activeComponent === 'tunnel' ? 'text-blue-600 ml-1' : 'text-gray-600 ml-1'} />
-              </div>
-              
-              {/* Customer Environment */}
-              <div className="bg-green-50 rounded-lg p-4 border border-green-200 mb-6">
-                <div className="flex justify-between items-center mb-3">
-                  <h3 className="font-medium text-green-800">Customer Environment</h3>
-                  <Server size={20} className="text-green-600" />
-                </div>
-                
-                <div className="grid grid-cols-3 gap-4 mb-4">
-                  <div 
-                    ref={agentRef}
-                    className={`cursor-pointer col-span-2 p-4 rounded-lg ${activeComponent === 'agent' ? 'bg-green-100 ring-2 ring-green-400' : 'bg-green-500 text-white'}`}
-                    onClick={() => handleComponentClick('agent', { top: 620, left: 320 })}
-                  >
-                    <div className="font-medium mb-2">Policy Authorization Agent (PAA)</div>
-                    <div className="text-sm text-center bg-green-400 bg-opacity-80 p-2 rounded-md mb-3">Agent</div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div 
-                        ref={pipRef}
-                        className={`cursor-pointer p-2 rounded-md text-center ${activeComponent === 'pip' ? 'bg-white text-green-800' : 'bg-green-400 bg-opacity-80'}`}
-                        onClick={(e) => { e.stopPropagation(); handleComponentClick('pip', { top: 670, left: 280 }); }}
-                      >
-                        <span className="text-sm">PIP Operator</span>
-                      </div>
-                      <div 
-                        ref={pdpRef}
-                        className={`cursor-pointer p-2 rounded-md text-center ${activeComponent === 'pdp' ? 'bg-white text-green-800' : 'bg-green-400 bg-opacity-80'}`}
-                        onClick={(e) => { e.stopPropagation(); handleComponentClick('pdp', { top: 670, left: 370 }); }}
-                      >
-                        <span className="text-sm">PDP</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div 
-                      className={`cursor-pointer p-3 rounded-lg ${activeComponent === 'dataStores' ? 'bg-green-100 ring-2 ring-green-400' : 'bg-gray-100'}`}
-                      onClick={() => handleComponentClick('dataStores', { top: 620, left: 500 })}
-                    >
-                      <div className="flex flex-col items-center">
-                        <Database size={20} className="text-gray-600" />
-                        <span className="text-sm mt-1 text-center">Customer Data Stores</span>
-                      </div>
-                    </div>
-                    
-                    <div 
-                      className={`cursor-pointer p-3 rounded-lg ${activeComponent === 'customerApps' ? 'bg-green-100 ring-2 ring-green-400' : 'bg-gray-100'}`}
-                      onClick={() => handleComponentClick('customerApps', { top: 680, left: 500 })}
-                    >
-                      <div className="flex flex-col items-center">
-                        <Layers size={20} className="text-gray-600" />
-                        <span className="text-sm mt-1 text-center">Customer Apps</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                <div 
-                  ref={authorizersRef}
-                  className={`cursor-pointer mb-4 p-3 rounded-lg ${activeComponent === 'authorizers' ? 'bg-green-100 ring-2 ring-green-400' : 'bg-teal-500 text-white'}`}
-                  onClick={() => handleComponentClick('authorizers', { top: 740, left: 320 })}
-                >
-                  <div className="flex items-center justify-center">
-                    <Shield size={20} className={activeComponent === 'authorizers' ? 'text-teal-600 mr-2' : 'text-white mr-2'} />
-                    <span className="font-medium">Authorizers</span>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Customer Managed Services */}
-              <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-                <div className="flex justify-between items-center mb-3">
-                  <h3 className="font-medium text-purple-800">Customer's Managed Services</h3>
-                  <Server size={20} className="text-purple-600" />
-                </div>
-                
-                <div className="flex justify-center items-center space-x-6">
-                  <div 
-                    ref={idpRef}
-                    className={`cursor-pointer p-3 rounded-lg ${activeComponent === 'idp' ? 'bg-purple-100 ring-2 ring-purple-400' : 'bg-gray-100'}`}
-                    onClick={() => handleComponentClick('idp', { top: 820, left: 240 })}
-                  >
-                    <div className="flex flex-col items-center">
-                      <Users size={20} className="text-purple-600" />
-                      <span className="text-sm mt-1">Identity Provider (IDP)</span>
-                    </div>
-                  </div>
-                  
-                  <div 
-                    ref={customerRedisRef}
-                    className={`cursor-pointer p-3 rounded-lg ${activeComponent === 'customerRedis' ? 'bg-purple-100 ring-2 ring-purple-400' : 'bg-gray-100'}`}
-                    onClick={() => handleComponentClick('customerRedis', { top: 820, left: 400 })}
-                  >
-                    <div className="flex flex-col items-center">
-                      <Database size={20} className="text-red-600" />
-                      <span className="text-sm mt-1">REDIS Store</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Enhanced Tooltip with Data Flows */}
-              {showTooltip && (
-                <div 
-                  className="absolute z-10 bg-white rounded-lg shadow-lg border border-gray-200 p-4 w-96 max-h-[600px] overflow-y-auto"
-                  style={{ 
-                    top: tooltipPosition.top,
-                    left: tooltipPosition.left > 400 ? 'auto' : tooltipPosition.left,
-                    right: tooltipPosition.left > 400 ? '20px' : 'auto',
-                    transform: 'translateY(10px)'
-                  }}
-                >
-                  <div className="flex justify-between items-start mb-3">
-                    <h4 className="font-medium text-blue-800 text-lg">{tooltipContent.title}</h4>
-                    <button 
-                      className="text-gray-400 hover:text-gray-600"
-                      onClick={() => setShowTooltip(false)}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  
-                  <p className="text-sm text-gray-600 mb-4">{tooltipContent.description}</p>
-                  
-                  {/* Connects To Section */}
-                  {tooltipContent.connectsTo && tooltipContent.connectsTo.length > 0 && (
-                    <div className="mb-4">
-                      <h5 className="font-medium text-gray-800 text-sm mb-2 flex items-center">
-                        <GitBranch size={14} className="mr-1" />
-                        Connects To:
-                      </h5>
-                      <ul className="space-y-1">
-                        {tooltipContent.connectsTo.map((connection, index) => (
-                          <li key={index} className="text-xs text-gray-600 flex items-start">
-                            <ArrowRight size={12} className="mr-1 mt-0.5 flex-shrink-0 text-blue-500" />
-                            <span>{connection}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  
-                  {/* Data Flow Section */}
-                  {(tooltipContent.dataFlow.incoming.length > 0 || tooltipContent.dataFlow.outgoing.length > 0) && (
-                    <div className="border-t border-gray-200 pt-3">
-                      <h5 className="font-medium text-gray-800 text-sm mb-2 flex items-center">
-                        <Zap size={14} className="mr-1" />
-                        Data Flow:
-                      </h5>
-                      
-                      {tooltipContent.dataFlow.incoming.length > 0 && (
-                        <div className="mb-3">
-                          <p className="text-xs font-medium text-green-700 mb-1">⬇ Incoming:</p>
-                          <ul className="space-y-1">
-                            {tooltipContent.dataFlow.incoming.map((flow, index) => (
-                              <li key={index} className="text-xs text-gray-600 pl-3">• {flow}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      
-                      {tooltipContent.dataFlow.outgoing.length > 0 && (
-                        <div>
-                          <p className="text-xs font-medium text-blue-700 mb-1">⬆ Outgoing:</p>
-                          <ul className="space-y-1">
-                            {tooltipContent.dataFlow.outgoing.map((flow, index) => (
-                              <li key={index} className="text-xs text-gray-600 pl-3">• {flow}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  
-                  <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end">
-                    <a href="https://docs.plainid.io/docs/architecture-diagram-and-high-level-components-1" target="_blank" rel="noopener noreferrer" className="text-blue-600 text-sm hover:text-blue-800 flex items-center">
-                      Learn more <ExternalLink size={14} className="ml-1" />
-                    </a>
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            {/* Legend */}
-            <div className="bg-white border border-gray-200 rounded-lg p-4 mb-6">
-              <h3 className="text-lg font-medium text-gray-800 mb-3">Component Legend</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <div className="flex items-center">
-                  <div className="w-4 h-4 rounded-full bg-blue-500 mr-2"></div>
-                  <span className="text-sm">SaaS Components</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-4 h-4 rounded-full bg-green-500 mr-2"></div>
-                  <span className="text-sm">Customer Environment</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-4 h-4 rounded-full bg-purple-500 mr-2"></div>
-                  <span className="text-sm">Customer's Managed Services</span>
-                </div>
-                <div className="flex items-center">
-                  <Database size={16} className="text-red-600 mr-2" />
-                  <span className="text-sm">REDIS Storage</span>
-                </div>
-                <div className="flex items-center">
-                  <Database size={16} className="text-blue-600 mr-2" />
-                  <span className="text-sm">Postgres Storage</span>
-                </div>
-                <div className="flex items-center">
-                  <Shield size={16} className="text-teal-600 mr-2" />
-                  <span className="text-sm">Authorization Components</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
-      
-      {/* Simple Footer */}
-      <footer className="bg-white border-t border-gray-200 py-4">
-        <div className="container mx-auto px-4 text-center text-gray-600 text-sm">
-          Made by the SE Team for Walkthrough Purposes Only
-        </div>
-      </footer>
-    </div>
-  );
+  },
+  'data-stores': {
+    name: 'Data stores',
+    fullName: 'Databases and data repositories',
+    zone: 'resource',
+    serviceName: 'data-stores',
+    description: 'Customer-owned databases and data stores protected by the SQL authorizer and queried by the PIP for attribute resolution.',
+    connectsTo: ['SQL authorizer', 'PIP'],
+    dataFlow: {
+      incoming: ['Filtered queries from applications', 'Attribute queries from PIP'],
+      outgoing: ['Filtered result sets', 'Attribute data']
+    }
+  },
+  'idp': {
+    name: 'Identity provider',
+    fullName: 'OIDC identity source',
+    zone: 'auxiliary',
+    serviceName: 'idp',
+    protocol: 'OIDC · SAML',
+    description: 'Customer-managed identity provider — Okta, Ping, Entra ID, Auth0. Issues signed identity tokens consumed by applications and validated by the PAA for JWT-based authorization context.',
+    connectsTo: ['Apps', 'PAA (JWT validation)'],
+    dataFlow: {
+      incoming: ['Authentication requests from apps'],
+      outgoing: ['Signed tokens', 'User claims']
+    },
+    docsPath: '/docs/administration-portal'
+  }
 };
 
-export default ArchitectureDiagram;
+const FLOW_STEPS = [
+  { arrows: [1], active: ['apps', 'envoy', 'pdp'], text: 'Envoy intercepts app request and calls PDP' },
+  { arrows: [1, 2], active: ['pdp', 'pip'], text: 'PDP queries PIP for required attributes' },
+  { arrows: [1, 2, 3], active: ['pip', 'data-stores'], text: 'PIP fetches attributes from customer data store' },
+  { arrows: [1, 2, 3, 4], active: ['pdp', 'envoy', 'apps'], text: 'PDP returns decision; Envoy enforces and forwards to app' }
+];
+
+const VIEWS = [
+  { id: 'architecture', label: 'Architecture' },
+  { id: 'flow', label: 'Request flow' },
+  { id: 'technical', label: 'Technical', badge: 'adv' }
+];
+
+const LEGEND_ITEMS = [
+  { swatch: '#9FE1CB', label: 'PlainID SaaS' },
+  { swatch: '#CECBF6', label: 'Policy agent (PAA)' },
+  { swatch: '#FAC775', label: 'Authorizer' },
+  { swatch: '#D3D1C7', label: 'Customer resource' },
+  { swatch: null, label: 'Protection unit', dashed: true }
+];
+
+// ============================================================================
+// LAYOUT COMPONENTS
+// ============================================================================
+
+function Header() {
+  return (
+    <header className="border-b border-gray-200 bg-white">
+      <div className="max-w-5xl mx-auto px-4 py-5 flex justify-between items-start">
+        <div>
+          <h1 className="text-lg font-medium text-gray-900 tracking-tight">PlainID reference architecture</h1>
+          <p className="text-sm text-gray-500 mt-1">Authorization platform components and data flow</p>
+        </div>
+        <a
+          href={`${DOCS_BASE}/docs/administration-portal`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm text-gray-600 hover:text-gray-900 mt-1 inline-flex items-center gap-1.5"
+        >
+          docs.plainid.io
+          <ExternalLink size={12} />
+        </a>
+      </div>
+    </header>
+  );
+}
+
+function Nav({ currentView, onChange }) {
+  return (
+    <div className="flex justify-center mb-5">
+      <div className="inline-flex gap-1 p-1 bg-gray-100 border border-gray-200 rounded-lg">
+        {VIEWS.map(v => {
+          const active = currentView === v.id;
+          return (
+            <button
+              key={v.id}
+              onClick={() => onChange(v.id)}
+              className={`px-5 py-2 rounded-md text-sm font-medium transition-colors inline-flex items-center gap-2 ${
+                active ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              {v.label}
+              {v.badge && (
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-50 text-gray-500 border border-gray-200 font-normal">
+                  {v.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Legend({ view }) {
+  if (view === 'technical') return null;
+  return (
+    <div className="flex gap-6 justify-center flex-wrap pt-4 pb-2 text-xs text-gray-600">
+      {LEGEND_ITEMS.map((item, i) => (
+        <span key={i} className="inline-flex items-center gap-2">
+          <span
+            className={`w-3 h-3 rounded-sm border ${item.dashed ? 'border-dashed border-[#993C1D]' : 'border-gray-200'}`}
+            style={{ background: item.swatch || 'transparent' }}
+          />
+          {item.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function FlowControls({ step, playing, onPlay, onPrev, onNext, stepCount }) {
+  return (
+    <div className="flex items-center justify-center gap-3 py-2 mb-2 flex-wrap">
+      <button
+        onClick={onPrev}
+        disabled={step === 0}
+        className="px-3 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-md hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1"
+      >
+        <ChevronLeft size={12} />Prev
+      </button>
+      <button
+        onClick={onPlay}
+        className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+      >
+        {playing ? <><Pause size={12} /> Pause</> : <><Play size={12} /> Play</>}
+      </button>
+      <button
+        onClick={onNext}
+        disabled={step === stepCount - 1}
+        className="px-3 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-md hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1"
+      >
+        Next<ChevronRight size={12} />
+      </button>
+      <div className="flex gap-1.5 items-center ml-1">
+        {Array.from({ length: stepCount }).map((_, i) => (
+          <span
+            key={i}
+            className={`w-2 h-2 rounded-full transition-all ${
+              i === step ? 'bg-purple-500 scale-150'
+              : i < step ? 'bg-purple-400'
+              : 'bg-gray-300'
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// DETAIL PANEL + DEEP DIVE
+// ============================================================================
+
+function DetailPanel({ componentId, view, onDeepDive }) {
+  const component = componentId ? COMPONENTS[componentId] : null;
+
+  if (!component) {
+    return (
+      <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 mt-5 text-sm text-gray-600">
+        <div className="font-medium text-gray-900 mb-1">Click any component for details</div>
+        <div className="text-xs text-gray-500 mb-2">
+          {view === 'architecture' && 'Architecture view · canonical deployment topology'}
+          {view === 'flow' && 'Request flow · step through a live authorization'}
+          {view === 'technical' && 'Technical · protocol and port detail'}
+        </div>
+        <div className="leading-relaxed">
+          {view === 'architecture' && 'Dashed containers group each authorizer with the resource it protects. Switch to Technical for protocol detail, or Request flow to trace a live authorization request.'}
+          {view === 'flow' && 'Use the play controls to step through an authorization request from app entry, through PDP decision, and back.'}
+          {view === 'technical' && 'Service-level view with versions, ports, protocols, and health. Click any service card for deployment details.'}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 mt-5 text-sm text-gray-600">
+      <div className="font-medium text-gray-900 text-base">{component.fullName || component.name}</div>
+      {component.serviceName && (
+        <div className="text-xs font-mono text-gray-500 mt-1 mb-3">
+          {component.serviceName}
+          {component.version && <span> · {component.version}</span>}
+          {component.port && <span> · :{component.port}</span>}
+          {component.protocol && !component.port && <span> · {component.protocol}</span>}
+        </div>
+      )}
+      <div className="leading-relaxed mb-4">{component.description}</div>
+
+      <div className="grid md:grid-cols-2 gap-4 mb-4">
+        {component.connectsTo && component.connectsTo.length > 0 && (
+          <div>
+            <div className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-2">Connects to</div>
+            <ul className="text-xs space-y-1">
+              {component.connectsTo.map((c, i) => (
+                <li key={i} className="flex items-start gap-1.5">
+                  <ArrowRight size={11} className="mt-0.5 text-gray-400 flex-shrink-0" />
+                  <span>{c}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {component.dataFlow && (
+          <div>
+            <div className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-2">Data in / out</div>
+            <ul className="text-xs space-y-1">
+              {component.dataFlow.incoming.map((d, i) => (
+                <li key={`in-${i}`} className="text-green-700">↓ {d}</li>
+              ))}
+              {component.dataFlow.outgoing.map((d, i) => (
+                <li key={`out-${i}`} className="text-blue-700">↑ {d}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-2 flex-wrap mt-4">
+        {component.deepDive && (
+          <button
+            onClick={() => onDeepDive(componentId)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          >
+            View deep dive <ArrowRight size={12} />
+          </button>
+        )}
+        {component.docsPath && (
+          <a
+            href={`${DOCS_BASE}${component.docsPath}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium bg-white text-gray-700 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
+          >
+            Docs <ExternalLink size={11} />
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DeepDiveModal({ componentId, onClose }) {
+  useEffect(() => {
+    if (!componentId) return;
+    const handler = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [componentId, onClose]);
+
+  if (!componentId) return null;
+  const component = COMPONENTS[componentId];
+  if (!component || !component.technical) return null;
+  const { technical } = component;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 flex items-start justify-center pt-16 px-4 z-50 overflow-y-auto"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="bg-white rounded-xl border border-gray-200 shadow-lg max-w-2xl w-full p-6 my-6"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex justify-between items-start mb-3">
+          <div>
+            <div className="text-lg font-mono font-medium text-gray-900">{component.serviceName}</div>
+            <div className="text-sm text-gray-500">{component.fullName} · deep dive</div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700" aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+
+        <p className="text-sm text-gray-600 leading-relaxed mb-5">{component.description}</p>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+          <div className="border border-gray-200 rounded-md bg-gray-50 px-3 py-2.5">
+            <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Latency (cached)</div>
+            <div className="text-sm font-medium text-gray-900 mt-0.5">{technical.latencyCached}</div>
+          </div>
+          <div className="border border-gray-200 rounded-md bg-gray-50 px-3 py-2.5">
+            <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Policy models</div>
+            <div className="text-sm font-medium text-gray-900 mt-0.5">{technical.policyModels}</div>
+          </div>
+          <div className="border border-gray-200 rounded-md bg-gray-50 px-3 py-2.5">
+            <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Deployment</div>
+            <div className="text-sm font-medium text-gray-900 mt-0.5">{technical.deployment}</div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-[140px_1fr] text-xs font-mono border-t border-gray-200">
+          <div className="py-2 text-gray-500">port · protocol</div>
+          <div className="py-2 text-gray-900 border-b border-gray-200">:{component.port} · {component.protocol}</div>
+          <div className="py-2 text-gray-500 border-b border-gray-200">latency (pip resolve)</div>
+          <div className="py-2 text-gray-900 border-b border-gray-200">{technical.latencyPipResolve}</div>
+          <div className="py-2 text-gray-500 border-b border-gray-200">connects to</div>
+          <div className="py-2 text-gray-900 border-b border-gray-200">{component.connectsTo.join(' · ')}</div>
+          <div className="py-2 text-gray-500 border-b border-gray-200">health endpoint</div>
+          <div className="py-2 text-gray-900 border-b border-gray-200">{technical.healthEndpoint}</div>
+        </div>
+
+        <div className="flex gap-1.5 mt-4 flex-wrap">
+          {technical.tags.map(t => (
+            <span key={t} className="text-[11px] font-mono px-2 py-0.5 rounded bg-gray-50 border border-gray-200 text-gray-600">
+              {t}
+            </span>
+          ))}
+        </div>
+
+        {component.docsPath && (
+          <div className="mt-5 pt-4 border-t border-gray-200">
+            <a
+              href={`${DOCS_BASE}${component.docsPath}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-blue-600 hover:text-blue-800 inline-flex items-center gap-1.5"
+            >
+              Open in documentation
+              <ExternalLink size={12} />
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// SVG DIAGRAM (architecture + flow views share this)
+// ============================================================================
+
+function SvgComponent({ id, selected, onSelect, opacity, children, label }) {
+  return (
+    <g
+      onClick={() => onSelect(id)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect(id);
+        }
+      }}
+      tabIndex={0}
+      role="button"
+      aria-label={label}
+      aria-pressed={selected}
+      style={{
+        cursor: 'pointer',
+        opacity,
+        transition: 'opacity 0.35s'
+      }}
+      className={selected ? 'plainid-selected' : 'plainid-clickable'}
+    >
+      {children}
+    </g>
+  );
+}
+
+function FlowArrow({ active, d, color }) {
+  return (
+    <path
+      d={d}
+      stroke={color}
+      strokeWidth="2.2"
+      fill="none"
+      markerEnd="url(#flow-arrow)"
+      style={{ opacity: active ? 1 : 0, transition: 'opacity 0.3s' }}
+    />
+  );
+}
+
+function FlowMarker({ n, active, cx, cy, color }) {
+  return (
+    <g style={{ opacity: active ? 1 : 0, transition: 'opacity 0.3s' }}>
+      <circle cx={cx} cy={cy} r="11" fill={color} />
+      <text x={cx} y={cy + 4} textAnchor="middle" fill="#fff" fontSize="11" fontWeight="500">{n}</text>
+    </g>
+  );
+}
+
+function DiagramSvg({ view, selectedId, onSelect, flowStep }) {
+  const isFlowView = view === 'flow';
+  const activeStep = isFlowView && flowStep != null ? FLOW_STEPS[flowStep] : null;
+  const activeComponents = activeStep?.active || [];
+  const activeArrows = activeStep?.arrows || [];
+
+  const componentOpacity = (id) => {
+    if (!isFlowView) return 1;
+    return activeComponents.includes(id) ? 1 : 0.4;
+  };
+  const isArrowActive = (n) => activeArrows.includes(n);
+  const zoneOpacity = isFlowView ? 0.15 : 1;
+
+  const comp = (id, children) => (
+    <SvgComponent
+      id={id}
+      selected={selectedId === id}
+      onSelect={onSelect}
+      opacity={componentOpacity(id)}
+      label={COMPONENTS[id]?.fullName || COMPONENTS[id]?.name || id}
+    >
+      {children}
+    </SvgComponent>
+  );
+
+  return (
+    <svg viewBox="0 0 680 530" className="w-full" role="img">
+      <title>PlainID reference architecture</title>
+      <desc>Three deployment zones: PlainID SaaS platform, customer-hosted Policy Authorization Agent, and customer environment with authorizer-resource protection units.</desc>
+
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </marker>
+        <marker id="flow-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" strokeWidth="1.8" strokeLinecap="round" />
+        </marker>
+      </defs>
+
+      {/* Zone: SaaS */}
+      <g style={{ opacity: zoneOpacity, transition: 'opacity 0.45s' }}>
+        <rect x="40" y="30" width="600" height="82" rx="12" fill="#E1F5EE" stroke="#0F6E56" strokeWidth="0.5" />
+        <text x="60" y="54" fill="#085041" fontSize="14" fontWeight="500">PlainID SaaS platform</text>
+        <text x="60" y="71" fill="#0F6E56" fontSize="12">Control plane · managed by PlainID</text>
+      </g>
+
+      {comp('policy-admin',
+        <>
+          <rect x="250" y="54" width="140" height="42" rx="6" fill="#9FE1CB" fillOpacity="0.65" stroke="#0F6E56" strokeWidth="0.5" />
+          <text x="320" y="73" fill="#085041" fontSize="14" fontWeight="500" textAnchor="middle" dominantBaseline="central">Policy admin</text>
+          <text x="320" y="89" fill="#0F6E56" fontSize="12" textAnchor="middle" dominantBaseline="central">PAP</text>
+        </>
+      )}
+
+      {comp('platform-storage',
+        <>
+          <rect x="410" y="54" width="200" height="42" rx="6" fill="#9FE1CB" fillOpacity="0.65" stroke="#0F6E56" strokeWidth="0.5" />
+          <text x="510" y="73" fill="#085041" fontSize="14" fontWeight="500" textAnchor="middle" dominantBaseline="central">Platform storage</text>
+          <text x="510" y="89" fill="#0F6E56" fontSize="12" textAnchor="middle" dominantBaseline="central">policies · sync · artifacts</text>
+        </>
+      )}
+
+      {/* Sync arrow */}
+      <g style={{ opacity: zoneOpacity, transition: 'opacity 0.45s' }}>
+        <path d="M 340 112 L 340 158" stroke="#888780" strokeWidth="1" strokeDasharray="4 3" fill="none" markerEnd="url(#arrow)" />
+        <text x="350" y="138" fill="#5F5E5A" fontSize="12" dominantBaseline="central">Policy sync · encrypted tunnel · no PII</text>
+      </g>
+
+      {/* Zone: PAA */}
+      <g style={{ opacity: zoneOpacity, transition: 'opacity 0.45s' }}>
+        <rect x="140" y="158" width="400" height="115" rx="12" fill="none" stroke="#534AB7" strokeWidth="0.5" strokeDasharray="5 3" />
+        <text x="340" y="180" fill="#3C3489" fontSize="14" fontWeight="500" textAnchor="middle">Policy Authorization Agent</text>
+        <text x="340" y="196" fill="#534AB7" fontSize="12" textAnchor="middle">Customer-hosted · Kubernetes or standalone</text>
+      </g>
+
+      {comp('pdp',
+        <>
+          <rect x="175" y="210" width="150" height="48" rx="8" fill="#CECBF6" stroke="#534AB7" strokeWidth="0.5" />
+          <text x="250" y="229" fill="#3C3489" fontSize="14" fontWeight="500" textAnchor="middle" dominantBaseline="central">PDP</text>
+          <text x="250" y="245" fill="#534AB7" fontSize="12" textAnchor="middle" dominantBaseline="central">Policy Decision Point</text>
+        </>
+      )}
+
+      {comp('pip',
+        <>
+          <rect x="355" y="210" width="150" height="48" rx="8" fill="#CECBF6" stroke="#534AB7" strokeWidth="0.5" />
+          <text x="430" y="229" fill="#3C3489" fontSize="14" fontWeight="500" textAnchor="middle" dominantBaseline="central">PIP</text>
+          <text x="430" y="245" fill="#534AB7" fontSize="12" textAnchor="middle" dominantBaseline="central">Policy Information Point</text>
+        </>
+      )}
+
+      {/* Architecture view: static flow labels */}
+      {!isFlowView && (
+        <g>
+          <path d="M 125 363 C 125 310, 210 280, 250 260" stroke="#7F77DD" strokeWidth="1.2" strokeOpacity="0.55" fill="none" markerEnd="url(#arrow)" />
+          <path d="M 280 363 L 260 265" stroke="#7F77DD" strokeWidth="1.2" strokeOpacity="0.55" fill="none" markerEnd="url(#arrow)" />
+          <path d="M 435 363 C 435 300, 340 280, 280 265" stroke="#7F77DD" strokeWidth="1.2" strokeOpacity="0.55" fill="none" markerEnd="url(#arrow)" />
+          <text x="555" y="295" fill="#5F5E5A" fontSize="12" dominantBaseline="central">Authorize</text>
+
+          <path d="M 430 258 C 430 330, 440 380, 435 412" stroke="#888780" strokeWidth="1" strokeDasharray="4 3" fill="none" markerEnd="url(#arrow)" />
+          <text x="485" y="335" fill="#5F5E5A" fontSize="12" dominantBaseline="central">Attributes</text>
+        </g>
+      )}
+
+      {/* Flow view: numbered arrows */}
+      {isFlowView && (
+        <>
+          <FlowArrow active={isArrowActive(1)} d="M 125 363 C 130 315, 190 285, 240 260" color="#7F77DD" />
+          <FlowArrow active={isArrowActive(2)} d="M 325 234 L 355 234" color="#7F77DD" />
+          <FlowArrow active={isArrowActive(3)} d="M 430 258 C 430 340, 440 380, 435 412" color="#7F77DD" />
+          <FlowArrow active={isArrowActive(4)} d="M 260 258 C 150 310, 80 370, 115 412" color="#1D9E75" />
+
+          <FlowMarker n={1} active={isArrowActive(1)} cx={165} cy={310} color="#7F77DD" />
+          <FlowMarker n={2} active={isArrowActive(2)} cx={340} cy={215} color="#7F77DD" />
+          <FlowMarker n={3} active={isArrowActive(3)} cx={452} cy={335} color="#7F77DD" />
+          <FlowMarker n={4} active={isArrowActive(4)} cx={140} cy={335} color="#1D9E75" />
+        </>
+      )}
+
+      {/* Zone: Customer environment */}
+      <g style={{ opacity: zoneOpacity, transition: 'opacity 0.45s' }}>
+        <rect x="40" y="295" width="600" height="225" rx="12" fill="#FAEEDA" stroke="#854F0B" strokeWidth="0.5" />
+        <text x="60" y="318" fill="#633806" fontSize="14" fontWeight="500">Customer environment</text>
+        <text x="60" y="334" fill="#854F0B" fontSize="12">Protection units pair each authorizer with its resource</text>
+
+        <rect x="52" y="352" width="146" height="152" rx="10" fill="none" stroke="#993C1D" strokeWidth="0.5" strokeDasharray="4 3" strokeOpacity="0.55" />
+        <rect x="207" y="352" width="146" height="152" rx="10" fill="none" stroke="#993C1D" strokeWidth="0.5" strokeDasharray="4 3" strokeOpacity="0.55" />
+        <rect x="362" y="352" width="146" height="152" rx="10" fill="none" stroke="#993C1D" strokeWidth="0.5" strokeDasharray="4 3" strokeOpacity="0.55" />
+      </g>
+
+      {comp('envoy',
+        <>
+          <rect x="65" y="363" width="120" height="38" rx="6" fill="#FAC775" fillOpacity="0.85" stroke="#854F0B" strokeWidth="0.5" />
+          <text x="125" y="378" fill="#633806" fontSize="14" fontWeight="500" textAnchor="middle" dominantBaseline="central">Envoy sidecar</text>
+          <text x="125" y="393" fill="#854F0B" fontSize="12" textAnchor="middle" dominantBaseline="central">Istio HTTP filter</text>
+        </>
+      )}
+      {comp('apps',
+        <>
+          <rect x="65" y="412" width="120" height="80" rx="8" fill="#F1EFE8" stroke="#5F5E5A" strokeWidth="0.5" />
+          <text x="125" y="436" fill="#2C2C2A" fontSize="14" fontWeight="500" textAnchor="middle" dominantBaseline="central">Apps</text>
+          <text x="125" y="456" fill="#5F5E5A" fontSize="12" textAnchor="middle" dominantBaseline="central">Web, API</text>
+          <text x="125" y="474" fill="#5F5E5A" fontSize="12" textAnchor="middle" dominantBaseline="central">services</text>
+        </>
+      )}
+
+      {comp('langchain-mcp',
+        <>
+          <rect x="220" y="363" width="120" height="38" rx="6" fill="#FAC775" fillOpacity="0.85" stroke="#854F0B" strokeWidth="0.5" />
+          <text x="280" y="378" fill="#633806" fontSize="14" fontWeight="500" textAnchor="middle" dominantBaseline="central">LangChain + MCP</text>
+          <text x="280" y="393" fill="#854F0B" fontSize="12" textAnchor="middle" dominantBaseline="central">AI authorizers</text>
+        </>
+      )}
+      {comp('ai-agents',
+        <>
+          <rect x="220" y="412" width="120" height="80" rx="8" fill="#F1EFE8" stroke="#5F5E5A" strokeWidth="0.5" />
+          <text x="280" y="436" fill="#2C2C2A" fontSize="14" fontWeight="500" textAnchor="middle" dominantBaseline="central">AI agents</text>
+          <text x="280" y="456" fill="#5F5E5A" fontSize="12" textAnchor="middle" dominantBaseline="central">LLM chains</text>
+          <text x="280" y="474" fill="#5F5E5A" fontSize="12" textAnchor="middle" dominantBaseline="central">tool calls</text>
+        </>
+      )}
+
+      {comp('sql-authorizer',
+        <>
+          <rect x="375" y="363" width="120" height="38" rx="6" fill="#FAC775" fillOpacity="0.85" stroke="#854F0B" strokeWidth="0.5" />
+          <text x="435" y="378" fill="#633806" fontSize="14" fontWeight="500" textAnchor="middle" dominantBaseline="central">SQL authorizer</text>
+          <text x="435" y="393" fill="#854F0B" fontSize="12" textAnchor="middle" dominantBaseline="central">DDL · row/col filter</text>
+        </>
+      )}
+      {comp('data-stores',
+        <>
+          <rect x="375" y="412" width="120" height="80" rx="8" fill="#F1EFE8" stroke="#5F5E5A" strokeWidth="0.5" />
+          <text x="435" y="436" fill="#2C2C2A" fontSize="14" fontWeight="500" textAnchor="middle" dominantBaseline="central">Data stores</text>
+          <text x="435" y="456" fill="#5F5E5A" fontSize="12" textAnchor="middle" dominantBaseline="central">Postgres, Snowflake</text>
+          <text x="435" y="474" fill="#5F5E5A" fontSize="12" textAnchor="middle" dominantBaseline="central">Oracle, LDAP</text>
+        </>
+      )}
+
+      {comp('idp',
+        <>
+          <rect x="520" y="412" width="110" height="80" rx="8" fill="#F1EFE8" stroke="#5F5E5A" strokeWidth="0.5" />
+          <text x="575" y="436" fill="#2C2C2A" fontSize="14" fontWeight="500" textAnchor="middle" dominantBaseline="central">Identity provider</text>
+          <text x="575" y="456" fill="#5F5E5A" fontSize="12" textAnchor="middle" dominantBaseline="central">OIDC, SAML</text>
+          <text x="575" y="474" fill="#5F5E5A" fontSize="12" textAnchor="middle" dominantBaseline="central">Okta, Ping, Entra</text>
+        </>
+      )}
+      <text x="575" y="395" fill="#5F5E5A" fontSize="12" textAnchor="middle" fontStyle="italic" style={{ opacity: zoneOpacity }}>identity source</text>
+    </svg>
+  );
+}
+
+// ============================================================================
+// TECHNICAL VIEW
+// ============================================================================
+
+function TechCard({ id, selected, onSelect }) {
+  const c = COMPONENTS[id];
+  if (!c) return null;
+  const statusColor = c.status === 'optional' ? 'bg-amber-500' : c.status === 'healthy' ? 'bg-green-600' : 'bg-gray-400';
+
+  return (
+    <button
+      onClick={() => onSelect(id)}
+      className={`text-left bg-gray-50 border rounded-lg p-3.5 transition-all w-full ${
+        selected ? 'border-blue-500 bg-white' : 'border-gray-200 hover:border-gray-300'
+      }`}
+    >
+      <div className="flex justify-between items-center mb-0.5">
+        <span className="font-mono text-[13px] font-medium text-gray-900 truncate">{c.serviceName || c.name}</span>
+        <span className="font-mono text-[11px] text-gray-500 inline-flex items-center gap-1.5 flex-shrink-0 ml-2">
+          {c.version || ''}
+          {c.status && <span className={`w-1.5 h-1.5 rounded-full ${statusColor}`} />}
+        </span>
+      </div>
+      <div className="text-[13px] text-gray-600 mt-0.5 truncate">{c.fullName || c.name}</div>
+      {(c.protocol || c.port) && (
+        <div className="font-mono text-[11px] text-gray-500 mt-2 pt-2 border-t border-gray-200 tracking-wider truncate">
+          {c.port && `:${c.port} · `}{c.protocol}
+        </div>
+      )}
+    </button>
+  );
+}
+
+function TechZoneLabel({ children }) {
+  return (
+    <div className="font-mono text-[11px] text-gray-500 tracking-wide mb-2 mt-1 flex items-center gap-2">
+      <span className="w-1 h-1 rounded-full bg-gray-400" />
+      {children}
+    </div>
+  );
+}
+
+function TechConnector({ label }) {
+  return (
+    <div className="flex items-center gap-3 justify-center py-4">
+      <div className="flex-1 max-w-[100px] h-px bg-gray-300" />
+      <span className="font-mono text-[11px] text-gray-500 whitespace-nowrap">{label}</span>
+      <div className="flex-1 max-w-[100px] h-px bg-gray-300" />
+    </div>
+  );
+}
+
+function TechnicalView({ selectedId, onSelect }) {
+  return (
+    <div>
+      <TechZoneLabel>Control plane · SaaS (managed by PlainID)</TechZoneLabel>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <TechCard id="policy-admin" selected={selectedId === 'policy-admin'} onSelect={onSelect} />
+        <TechCard id="agent-server" selected={selectedId === 'agent-server'} onSelect={onSelect} />
+        <TechCard id="cloud-pdp" selected={selectedId === 'cloud-pdp'} onSelect={onSelect} />
+        <TechCard id="platform-storage" selected={selectedId === 'platform-storage'} onSelect={onSelect} />
+      </div>
+
+      <TechConnector label="MQTT/TLS 1.3 · outbound-only · no PII crosses" />
+
+      <TechZoneLabel>Data plane · PAA (customer-hosted · Kubernetes or standalone)</TechZoneLabel>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <TechCard id="agent" selected={selectedId === 'agent'} onSelect={onSelect} />
+        <TechCard id="pdp" selected={selectedId === 'pdp'} onSelect={onSelect} />
+        <TechCard id="pip" selected={selectedId === 'pip'} onSelect={onSelect} />
+      </div>
+
+      <TechConnector label="ext_authz · in-cluster · decisions + obligations" />
+
+      <TechZoneLabel>Enforcement layer · authorizers (PEP integrations)</TechZoneLabel>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <TechCard id="envoy" selected={selectedId === 'envoy'} onSelect={onSelect} />
+        <TechCard id="langchain-mcp" selected={selectedId === 'langchain-mcp'} onSelect={onSelect} />
+        <TechCard id="sql-authorizer" selected={selectedId === 'sql-authorizer'} onSelect={onSelect} />
+      </div>
+
+      <TechConnector label="inline · filtered responses" />
+
+      <TechZoneLabel>Customer services</TechZoneLabel>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <TechCard id="apps" selected={selectedId === 'apps'} onSelect={onSelect} />
+        <TechCard id="ai-agents" selected={selectedId === 'ai-agents'} onSelect={onSelect} />
+        <TechCard id="data-stores" selected={selectedId === 'data-stores'} onSelect={onSelect} />
+        <TechCard id="idp" selected={selectedId === 'idp'} onSelect={onSelect} />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
+
+export default function ArchitectureDiagram() {
+  const [currentView, setCurrentView] = useState('architecture');
+  const [selectedId, setSelectedId] = useState(null);
+  const [flowStep, setFlowStep] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [deepDiveId, setDeepDiveId] = useState(null);
+  const intervalRef = useRef(null);
+
+  // Reset flow state when leaving the flow view
+  useEffect(() => {
+    if (currentView !== 'flow') {
+      setPlaying(false);
+      setFlowStep(0);
+    }
+  }, [currentView]);
+
+  // Playback interval
+  useEffect(() => {
+    if (!playing) return;
+    intervalRef.current = setInterval(() => {
+      setFlowStep(s => {
+        if (s >= FLOW_STEPS.length - 1) {
+          setPlaying(false);
+          return s;
+        }
+        return s + 1;
+      });
+    }, 1800);
+    return () => clearInterval(intervalRef.current);
+  }, [playing]);
+
+  const handleSelect = useCallback((id) => {
+    setSelectedId(prev => prev === id ? null : id);
+  }, []);
+
+  const handleDeepDive = useCallback((id) => {
+    setDeepDiveId(id);
+  }, []);
+
+  const handlePlay = useCallback(() => {
+    if (flowStep === FLOW_STEPS.length - 1) setFlowStep(0);
+    setPlaying(p => !p);
+  }, [flowStep]);
+
+  return (
+    <div className="min-h-screen bg-white text-gray-900">
+      <style>{`
+        .plainid-selected > rect { stroke-width: 2 !important; stroke: #378ADD !important; }
+        .plainid-clickable:focus { outline: 2px solid #378ADD; outline-offset: 2px; }
+        .plainid-clickable:hover { opacity: 0.85 !important; }
+      `}</style>
+
+      <Header />
+
+      <main className="max-w-5xl mx-auto px-4 py-6">
+        <Nav currentView={currentView} onChange={setCurrentView} />
+
+        {currentView === 'flow' && (
+          <>
+            <FlowControls
+              step={flowStep}
+              playing={playing}
+              onPlay={handlePlay}
+              onPrev={() => setFlowStep(s => Math.max(0, s - 1))}
+              onNext={() => setFlowStep(s => Math.min(FLOW_STEPS.length - 1, s + 1))}
+              stepCount={FLOW_STEPS.length}
+            />
+            <div className="text-center text-sm text-gray-600 min-h-[20px] mb-3">
+              Step {flowStep + 1} of {FLOW_STEPS.length} · {FLOW_STEPS[flowStep].text}
+            </div>
+          </>
+        )}
+
+        <div className="border border-gray-200 bg-white rounded-xl p-5 shadow-sm">
+          {currentView === 'technical' ? (
+            <TechnicalView selectedId={selectedId} onSelect={handleSelect} />
+          ) : (
+            <DiagramSvg
+              view={currentView}
+              selectedId={selectedId}
+              onSelect={handleSelect}
+              flowStep={currentView === 'flow' ? flowStep : null}
+            />
+          )}
+        </div>
+
+        <DetailPanel
+          componentId={selectedId}
+          view={currentView}
+          onDeepDive={handleDeepDive}
+        />
+
+        <Legend view={currentView} />
+      </main>
+
+      <footer className="border-t border-gray-200 py-4 px-4 mt-8">
+        <div className="max-w-5xl mx-auto text-center text-xs text-gray-500">
+          Maintained by the SE team · reference only
+        </div>
+      </footer>
+
+      <DeepDiveModal
+        componentId={deepDiveId}
+        onClose={() => setDeepDiveId(null)}
+      />
+    </div>
+  );
+}
