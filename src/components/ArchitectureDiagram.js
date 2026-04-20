@@ -3,6 +3,12 @@ import { ExternalLink, Play, Pause, ChevronLeft, ChevronRight, X, ArrowRight } f
 
 // ============================================================================
 // DATA
+//
+// All technical claims in this file are backed by docs.plainid.io.
+// See /docs/pdp-1, /docs/pip-operator-service, /docs/agent-1,
+// /docs/istio-and-osm-integrations, /docs/sql-database-authorizer,
+// /docs/administration-portal, /docs/langchain-authorizer-use-case.
+// Versions intentionally omitted — update source of truth elsewhere.
 // ============================================================================
 
 const DOCS_BASE = 'https://docs.plainid.io';
@@ -12,65 +18,77 @@ const COMPONENTS = {
   'policy-admin': {
     name: 'policy-admin',
     fullName: 'Policy admin',
-    longName: 'Policy Administration Point',
+    longName: 'Policy Administration Point (PAP)',
     zone: 'saas',
-    version: 'v5.2611',
-    port: '443',
     protocol: 'HTTPS · REST',
     status: 'healthy',
     shortDesc: 'Policy authoring UI',
-    description: 'Central UI where administrators author, version, and publish policies. Policies flow from here to every connected PAA through the secured sync channel.',
-    connectsTo: ['tenant-store', 'All connected PAAs'],
+    description: 'The PAP is where administrators author, version, and publish policies. Each PAA subscribes to this Platform and pulls its policies down over the Agent tunnel.',
+    connectsTo: ['All connected PAAs via Agent tunnel'],
     dataFlow: {
       incoming: ['Admin UI actions', 'Policy authoring API'],
       outgoing: ['Published policies', 'Audit events']
     },
     docsPath: '/docs/administration-portal'
   },
-  'tenant-store': {
-    name: 'tenant-store',
-    fullName: 'Tenant storage',
-    longName: 'Policy + sync backing store',
+  'cloud-pdp': {
+    name: 'cloud-pdp',
+    fullName: 'Default cloud PAA',
+    longName: 'Built-in cloud-hosted PAA with preconfigured PDP',
     zone: 'saas',
-    version: 'pg15 + redis7',
-    protocol: 'Postgres + Redis',
+    protocol: 'HTTPS',
     status: 'healthy',
-    shortDesc: 'Policies, sync, artifacts',
-    description: 'Durable store for tenant policies and compiled authorization artifacts. Postgres holds policy definitions and audit data; Redis manages sync channel state and compiled artifact cache.',
-    connectsTo: ['policy-admin', 'All connected PAAs'],
+    shortDesc: 'Built-in, preconfigured',
+    description: 'Every tenant ships with a built-in cloud-hosted PAA that includes a preconfigured PDP. Customers can authorize against this directly via tenant-name.{region}.plainid.io, or deploy one or more customer-hosted PAAs for lower latency and data residency.',
+    connectsTo: ['policy-admin'],
     dataFlow: {
-      incoming: ['Policy writes from PAP'],
-      outgoing: ['Sync payloads', 'Compiled artifacts']
+      incoming: ['Authorization requests from apps using the cloud endpoint'],
+      outgoing: ['Permit or deny decisions']
     },
     docsPath: '/docs/administration-portal'
   },
 
-  // ---- PAA data plane ----
+  // ---- PAA data plane (customer-hosted) ----
+  'agent': {
+    name: 'agent',
+    fullName: 'Agent',
+    longName: 'PAA control-plane client',
+    zone: 'paa',
+    port: '8081',
+    protocol: 'WSS or HTTPS tunnel',
+    status: 'healthy',
+    shortDesc: 'Connects PAA to the Platform',
+    description: 'Connects the PAA to the Platform. Opens a persistent outbound tunnel (WebSocket or HTTPS) to remote.{region}.plainid.io and pulls policy and configuration updates from the Platform down to the PAA. The health endpoint reports on tunnel connectivity and Redis.',
+    connectsTo: ['policy-admin', 'runtime', 'pip-operator', 'Local Redis'],
+    dataFlow: {
+      incoming: ['Policy sync payloads', 'Configuration updates'],
+      outgoing: ['Health reports', 'Subscription heartbeats']
+    },
+    docsPath: '/docs/agent-1'
+  },
   'runtime': {
     name: 'runtime',
-    fullName: 'PDP',
+    fullName: 'PDP (runtime)',
     longName: 'Policy Decision Point',
     zone: 'paa',
-    version: 'v5.2611',
-    port: '8080',
-    protocol: 'HTTPS · ext_authz',
+    port: '8010',
+    protocol: 'HTTPS · REST',
     status: 'healthy',
     shortDesc: 'Policy Decision Point',
-    description: 'Evaluates authorization policies against request context and returns permit or deny with optional obligations. Runs locally for sub-millisecond latency and to keep all PII within the customer boundary.',
-    connectsTo: ['pip-operator', 'All authorizers'],
+    description: 'Evaluates authorization policies against request context and returns permit or deny with optional obligations (filters, masks). Runs locally inside the PAA so decisions stay close to the workload and no PII crosses the Platform boundary. Caches policies and identity records in Redis.',
+    connectsTo: ['pip-operator', 'Authorizers', 'Local Redis'],
     dataFlow: {
-      incoming: ['Authorization requests', 'Synced policies'],
+      incoming: ['Authorization requests from authorizers', 'Synced policies from Platform'],
       outgoing: ['Decisions', 'Obligations (filters, masks)']
     },
     technical: {
-      latencyCached: '<1ms',
-      latencyPipResolve: '~8ms',
-      policyModels: 'ABAC · RBAC · ReBAC',
-      deployment: 'Helm · standalone · sidecar',
-      healthEndpoint: 'GET /api/version',
-      tags: ['stateless', 'in-cluster', 'jwt-validated', 'horizontally-scaled']
+      policyModels: 'Policy-Based Access Control (PBAC)',
+      deployment: 'Helm chart · standalone',
+      healthEndpoint: 'GET /api/runtime_health_check',
+      ports: ':8010 (httpPort) · serviceMgmtPort configurable',
+      tags: ['in-cluster', 'jwt-validated', 'redis-backed', 'horizontally-scaled']
     },
-    docsPath: '/docs/administration-portal',
+    docsPath: '/docs/pdp-1',
     deepDive: true
   },
   'pip-operator': {
@@ -78,68 +96,67 @@ const COMPONENTS = {
     fullName: 'PIP',
     longName: 'Policy Information Point',
     zone: 'paa',
-    version: 'v5.2611',
-    port: '8080',
-    protocol: 'LDAP · JDBC · REST',
+    port: '8089',
+    protocol: 'JDBC · Teiid VDB',
     status: 'healthy',
-    shortDesc: 'Policy Information Point',
-    description: 'Resolves attributes the PDP needs to evaluate a policy — user entitlements, resource metadata, relationship graphs. Queries customer data sources on demand through pluggable connectors.',
-    connectsTo: ['runtime', 'data-stores', 'idp'],
+    shortDesc: 'Virtual data layer',
+    description: 'Resolves attributes the PDP needs — user entitlements, resource metadata, relationship graphs. Built on a Teiid Virtual Database engine that federates multiple data sources (JDBC, REST, LDAP, NoSQL) through a single query layer. Custom JDBC drivers can be pre-loaded.',
+    connectsTo: ['runtime', 'Data sources', 'IdP'],
     dataFlow: {
       incoming: ['Attribute requests from PDP'],
       outgoing: ['Resolved attributes']
     },
-    docsPath: '/docs/administration-portal'
+    docsPath: '/docs/pip-operator-service'
   },
 
   // ---- Authorizers (PEP) ----
   'envoy-sidecar': {
     name: 'envoy-sidecar',
     fullName: 'Envoy authorizer',
-    longName: 'Istio HTTP filter',
+    longName: 'Authorizer Operator, called via Envoy ext_authz',
     zone: 'authorizer',
-    protocol: 'Istio · HTTP filter',
+    protocol: 'gRPC ext_authz',
     status: 'healthy',
-    shortDesc: 'Istio HTTP filter',
-    description: 'Envoy sidecar authorizer deployed alongside service pods. Intercepts inbound HTTP traffic and calls the PDP via ext_authz filter before forwarding to the protected service.',
+    shortDesc: 'Istio / OSM ext_authz',
+    description: 'The PlainID Authorizer Operator runs co-located with Envoy and exposes a gRPC ext_authz endpoint (typically localhost:50051). Envoy filters are configured to call it on every inbound request, the Operator calls the PDP, and the decision is enforced before traffic reaches the protected service.',
     connectsTo: ['runtime', 'apps'],
     dataFlow: {
-      incoming: ['HTTP requests to protected services'],
-      outgoing: ['Authorization requests', 'Forwarded or denied traffic']
+      incoming: ['ext_authz calls from Envoy (HTTP requests)'],
+      outgoing: ['Authorization requests to PDP', 'Permit / deny responses to Envoy']
     },
-    docsPath: '/docs/administration-portal'
+    docsPath: '/docs/istio-and-osm-integrations'
   },
   'ai-authorizers': {
     name: 'ai-authorizers',
     fullName: 'LangChain + MCP',
-    longName: 'AI authorizer suite',
+    longName: 'AI authorization components',
     zone: 'authorizer',
-    protocol: 'Python · JSON-RPC',
+    protocol: 'Python (langchain_plainid)',
     status: 'healthy',
     shortDesc: 'LangChain + MCP',
-    description: 'Authorization wrappers for AI systems. LangChain authorizer implements the three-guardrail pattern (Categorizer, Retriever Filter, Anonymizer). MCP gateway enforces tool-level authorization for agent workflows.',
+    description: 'The langchain_plainid package provides three authorization points for AI workflows: PlainIDCategorizer authorizes user prompts, PlainIDRetriever filters RAG documents against user permissions before they reach the LLM, and an anonymization layer redacts PII in responses. The same components extend to MCP tool invocations.',
     connectsTo: ['runtime', 'ai-agents'],
     dataFlow: {
-      incoming: ['Chain invocations', 'MCP tool calls'],
-      outgoing: ['Authorization requests', 'Filtered or blocked outputs']
+      incoming: ['LangChain chain invocations', 'MCP tool calls'],
+      outgoing: ['Authorization requests to PDP', 'Filtered or redacted outputs']
     },
-    docsPath: '/docs/administration-portal'
+    docsPath: '/docs/langchain-authorizer-use-case'
   },
   'sql-authorizer': {
     name: 'sql-authorizer',
     fullName: 'SQL authorizer',
-    longName: 'Database authorization plugin',
+    longName: 'Real-time SQL query proxy',
     zone: 'authorizer',
-    protocol: 'DDL · row/col filter',
+    protocol: 'SQL proxy',
     status: 'healthy',
-    shortDesc: 'Row/col filter',
-    description: 'Database-side authorizer that injects policy-based filters into SQL queries at the DDL layer. Enforces row-level and column-level access without requiring application changes.',
+    shortDesc: 'Query-rewriting proxy',
+    description: 'Real-time proxy service that intercepts SQL queries, calls the PDP Policy Resolution endpoint for the requesting identity, and rewrites the query with row, column, or cell-level filters before forwarding to the database. Officially supports PostgreSQL and Microsoft SQL Server, with Java Spring Boot and .NET client libraries.',
     connectsTo: ['runtime', 'data-stores'],
     dataFlow: {
-      incoming: ['SQL queries from applications'],
-      outgoing: ['Policy-filtered queries']
+      incoming: ['SQL queries from applications or SDK'],
+      outgoing: ['Policy-modified queries', 'Authorization requests to PDP']
     },
-    docsPath: '/docs/administration-portal'
+    docsPath: '/docs/sql-database-authorizer'
   },
 
   // ---- Customer resources ----
@@ -149,47 +166,47 @@ const COMPONENTS = {
     longName: 'Protected applications',
     zone: 'resource',
     shortDesc: 'Web, API, gRPC',
-    description: 'Customer-owned applications and services protected by PlainID authorization — web apps, REST APIs, gRPC services.',
+    description: 'Customer-owned applications — web apps, REST APIs, gRPC services — sitting behind the Envoy authorizer.',
     connectsTo: ['envoy-sidecar', 'idp'],
     dataFlow: {
-      incoming: ['Authorized traffic', 'User sessions'],
+      incoming: ['Authorized traffic from Envoy', 'User sessions with IdP tokens'],
       outgoing: ['Enforced responses']
     }
   },
   'ai-agents': {
     name: 'ai-agents',
     fullName: 'AI agents',
-    longName: 'LLM chains and autonomous agents',
+    longName: 'LLM chains and MCP-enabled agents',
     zone: 'resource',
     shortDesc: 'LLM chains, tools',
-    description: 'AI systems protected by the LangChain and MCP authorizers — LLM-driven chains, autonomous agents, and MCP-enabled tool-using assistants.',
+    description: 'AI systems protected by the LangChain and MCP authorization components — LLM-driven chains, autonomous agents, and tool-using assistants that invoke external capabilities through MCP.',
     connectsTo: ['ai-authorizers'],
     dataFlow: {
-      incoming: ['User prompts', 'Authorized context'],
-      outgoing: ['Filtered responses', 'Tool calls']
+      incoming: ['User prompts', 'Authorized retrieval results'],
+      outgoing: ['Filtered responses', 'Tool invocations']
     }
   },
   'data-stores': {
     name: 'data-stores',
     fullName: 'Data stores',
-    longName: 'Databases and data repositories',
+    longName: 'Databases protected by the SQL authorizer',
     zone: 'resource',
-    shortDesc: 'Postgres, Snowflake',
-    description: 'Customer-owned databases and data stores protected by the SQL authorizer and queried by the PIP for attribute resolution.',
+    shortDesc: 'PostgreSQL, MSSQL',
+    description: 'Customer-owned databases protected by the SQL authorizer proxy. Officially supported engines are PostgreSQL and Microsoft SQL Server. The PIP also queries these stores for attribute resolution.',
     connectsTo: ['sql-authorizer', 'pip-operator'],
     dataFlow: {
-      incoming: ['Filtered queries', 'Attribute queries'],
-      outgoing: ['Filtered results', 'Attribute data']
+      incoming: ['Policy-filtered queries', 'Attribute queries from PIP'],
+      outgoing: ['Filtered result sets', 'Attribute data']
     }
   },
   'idp': {
     name: 'idp',
     fullName: 'Identity provider',
-    longName: 'OIDC identity source',
+    longName: 'Customer-managed OIDC / SAML IdP',
     zone: 'identity',
-    protocol: 'OIDC',
+    protocol: 'OIDC · SAML',
     shortDesc: 'Okta, Ping, Entra, Auth0',
-    description: 'Customer-managed identity provider — Okta, Ping, Entra ID, Auth0. Issues signed identity tokens consumed by applications and validated by the PAA for JWT-based authorization context.',
+    description: 'Customer-managed identity provider — Okta, Ping, Entra ID, Auth0. Issues signed identity tokens consumed by applications and validated by the PAA at authorization time. JWKS endpoints are configured per Scope.',
     connectsTo: ['apps', 'pip-operator'],
     dataFlow: {
       incoming: ['Authentication requests'],
@@ -203,15 +220,15 @@ const ZONES = {
   saas: {
     eyebrow: 'Control plane',
     title: 'PlainID SaaS',
-    subtitle: 'Managed by PlainID. Policy authoring, tenant state, sync.',
-    components: ['policy-admin', 'tenant-store'],
+    subtitle: 'Managed by PlainID. Policy authoring and built-in cloud PAA.',
+    components: ['policy-admin', 'cloud-pdp'],
     accent: 'indigo'
   },
   paa: {
     eyebrow: 'Data plane',
-    title: 'Policy agent',
-    subtitle: 'Customer-hosted. Kubernetes or standalone.',
-    components: ['runtime', 'pip-operator'],
+    title: 'Policy Authorization Agent',
+    subtitle: 'Customer-hosted. Helm or standalone deployment.',
+    components: ['agent', 'runtime', 'pip-operator'],
     accent: 'indigo'
   },
   enforcement: {
@@ -237,7 +254,7 @@ const ZONES = {
 const FLOW_STEPS = [
   {
     active: ['apps', 'envoy-sidecar', 'runtime'],
-    text: 'Envoy intercepts app request and calls PDP',
+    text: 'Envoy intercepts app request and calls the PDP via ext_authz',
     barsActive: ['authz']
   },
   {
@@ -247,12 +264,12 @@ const FLOW_STEPS = [
   },
   {
     active: ['pip-operator', 'data-stores'],
-    text: 'PIP fetches attributes from customer data store',
+    text: 'PIP fetches attributes from a customer data store',
     barsActive: ['authz']
   },
   {
     active: ['runtime', 'envoy-sidecar', 'apps'],
-    text: 'PDP returns decision; Envoy enforces and forwards to app',
+    text: 'PDP returns decision; Envoy enforces and forwards to the app',
     barsActive: ['authz']
   }
 ];
@@ -354,9 +371,9 @@ function NodeCard({ id, onSelect, highlighted, dimmed, muted, selected }) {
           {c.shortDesc}
         </div>
       )}
-      {(c.version || c.protocol) && (
+      {(c.port || c.protocol) && (
         <div className="font-mono text-[10px] text-neutral-400 dark:text-neutral-500 mt-1.5 tracking-wide truncate">
-          {c.version && c.port ? `${c.version} · :${c.port}` : c.protocol || c.version}
+          {c.port ? `:${c.port} · ${c.protocol}` : c.protocol}
         </div>
       )}
     </button>
@@ -474,7 +491,10 @@ function DiagramLayout({ isFlow, selectedId, onSelect, flowStep }) {
         </div>
       </ZoneRow>
 
-      <SyncBar label="policy sync · outbound MQTT/TLS · no PII crosses" active={false} />
+      <SyncBar
+        label="policy sync · Agent tunnel (wss or https) · no PII crosses"
+        active={false}
+      />
 
       <ZoneRow zone={ZONES.paa}>
         <div className="flex gap-2 flex-wrap">
@@ -482,7 +502,10 @@ function DiagramLayout({ isFlow, selectedId, onSelect, flowStep }) {
         </div>
       </ZoneRow>
 
-      <SyncBar label="ext_authz · authorization requests + obligations" active={barsActive.has('authz')} />
+      <SyncBar
+        label="ext_authz · authorization requests + obligations"
+        active={barsActive.has('authz')}
+      />
 
       <ZoneRow zone={ZONES.enforcement}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -593,9 +616,8 @@ function DetailPanel({ componentId, onDeepDive }) {
           </div>
         </div>
         <div className="font-mono text-[10px] text-neutral-400 dark:text-neutral-500 tracking-wide text-right flex-shrink-0">
-          {c.version && <div>{c.version}</div>}
           {c.port && <div>:{c.port}</div>}
-          {c.protocol && !c.port && <div className="truncate max-w-[180px]">{c.protocol}</div>}
+          {c.protocol && <div className="truncate max-w-[180px]">{c.protocol}</div>}
         </div>
       </div>
 
@@ -675,7 +697,9 @@ function DeepDiveModal({ componentId, onClose }) {
   const { technical } = c;
 
   const rows = [
-    ['port · protocol', c.port ? `:${c.port} · ${c.protocol}` : c.protocol],
+    ['ports', technical.ports || (c.port ? `:${c.port}` : '—')],
+    ['protocol', c.protocol],
+    ['policy models', technical.policyModels],
     ['deployment', technical.deployment],
     ['health endpoint', technical.healthEndpoint],
     ['connects to', c.connectsTo.join(' · ')]
@@ -715,23 +739,6 @@ function DeepDiveModal({ componentId, onClose }) {
             {c.description}
           </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-5">
-            {[
-              { label: 'latency (cached)', value: technical.latencyCached },
-              { label: 'latency (pip)', value: technical.latencyPipResolve },
-              { label: 'policy models', value: technical.policyModels }
-            ].map(m => (
-              <div key={m.label} className="border border-neutral-200 dark:border-neutral-800 rounded-md px-3 py-2 bg-neutral-50 dark:bg-neutral-900/60">
-                <div className="font-mono text-[10px] uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
-                  {m.label}
-                </div>
-                <div className="text-sm font-mono font-medium text-neutral-900 dark:text-neutral-100 mt-0.5">
-                  {m.value}
-                </div>
-              </div>
-            ))}
-          </div>
-
           <div className="font-mono text-xs border-t border-neutral-100 dark:border-neutral-900">
             {rows.map(([k, v]) => (
               <div key={k} className="grid grid-cols-[140px_1fr] py-2 border-b border-neutral-100 dark:border-neutral-900 last:border-b-0 gap-3">
@@ -741,16 +748,18 @@ function DeepDiveModal({ componentId, onClose }) {
             ))}
           </div>
 
-          <div className="flex gap-1.5 mt-4 flex-wrap">
-            {technical.tags.map(t => (
-              <span
-                key={t}
-                className="text-[10px] font-mono px-2 py-0.5 rounded bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-800"
-              >
-                {t}
-              </span>
-            ))}
-          </div>
+          {technical.tags && (
+            <div className="flex gap-1.5 mt-4 flex-wrap">
+              {technical.tags.map(t => (
+                <span
+                  key={t}
+                  className="text-[10px] font-mono px-2 py-0.5 rounded bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-800"
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
+          )}
 
           {c.docsPath && (
             <div className="mt-5 pt-4 border-t border-neutral-100 dark:border-neutral-900">
