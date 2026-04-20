@@ -187,7 +187,7 @@ const COMPONENTS = {
     fullName: 'Identity provider',
     longName: 'OIDC identity source',
     zone: 'identity',
-    protocol: 'OIDC · SAML',
+    protocol: 'OIDC',
     shortDesc: 'Okta, Ping, Entra, Auth0',
     description: 'Customer-managed identity provider — Okta, Ping, Entra ID, Auth0. Issues signed identity tokens consumed by applications and validated by the PAA for JWT-based authorization context.',
     connectsTo: ['apps', 'pip-operator'],
